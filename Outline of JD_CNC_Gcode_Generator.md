@@ -1,0 +1,1 @@
+/home/daniel/Documents/Personal_Projects/JD_CNC_Machine/Mk1/Documents/Outline of JD_CNC_Gcode_Generator.md

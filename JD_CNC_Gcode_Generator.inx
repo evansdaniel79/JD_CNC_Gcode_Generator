@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Gcode Generator</name>
+  <id>gcode.generator</id>
+  
+  <effect>
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="JD CNC"/>
+    </effects-menu>
+  </effect>
+  
+  <script>
+    <command location="inx" interpreter="python">gcode_generator.py</command>
+  </script>
+</inkscape-extension>
