@@ -101,12 +101,15 @@ class GCodeLogic:
         else:
             # Servo mode
             speed = to_mm_min(self.config["scoring_speed"] if process_type == "scoring" else self.config["cutting_speed"])
-            servo_angle = self.config["servo_score"] if process_type == "scoring" else self.config["servo_down"]
+            servo_angle = self.config["servo_score"] if process_type == "scoring" else self.config["servo_cut"]
             travel_speed = to_mm_min(self.config["travel_speed"])
-            servo_up_angle = self.config["servo_up"]
-            servo_delay = float(self.config["servo_delay"])
+            servo_travel_angle = self.config["servo_travel"]
+            servo_delay_str = self.config.get("servo_delay", "200")
+            try:
+                servo_delay = float(servo_delay_str) if servo_delay_str.strip() else 200.0
+            except ValueError:
+                servo_delay = 200.0
             last_point = None
-            
             for path in paths:
                 for sub in path:
                     if not sub:
@@ -116,13 +119,11 @@ class GCodeLogic:
                         dist = ((start_point[0] - last_point[0]) ** 2 + (start_point[1] - last_point[1]) ** 2) ** 0.5
                         stats["distance"] += dist
                         stats["time"] += dist / travel_speed if travel_speed else 0
-                    
-                    gcode.append(f"M3 S{servo_up_angle} ; Tool up")
+                    gcode.append(f"M3 S{servo_travel_angle} ; Tool up (travel)")
                     gcode.append(f"G0 F{travel_speed} X{start_point[0]:.3f} Y{start_point[1]:.3f}")
                     gcode.append(f"M3 S{servo_angle} ; Tool {process_type}")
                     gcode.append(f"G4 P{servo_delay} ; Wait for servo")
                     stats["tool_changes"] += 1
-                    
                     last = start_point
                     for point in sub[1:]:
                         p = self._apply_offsets_and_origin(point)
@@ -131,8 +132,7 @@ class GCodeLogic:
                         stats["time"] += dist / speed if speed else 0
                         gcode.append(f"G1 F{speed} X{p[0]:.3f} Y{p[1]:.3f}")
                         last = p
-                    
-                    gcode.append(f"M3 S{servo_up_angle} ; Tool up")
+                    gcode.append(f"M3 S{servo_travel_angle} ; Tool up (travel)")
                     last_point = sub[-1]
             return gcode, stats
 

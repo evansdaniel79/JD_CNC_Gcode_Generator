@@ -33,7 +33,7 @@ class CNCDialog(Gtk.Dialog):
         self.config = self.config_manager.load_config()
         self.default_config = self.config_manager.load_default()
         
-        self.set_default_size(800, 650)
+        self.set_default_size(1200, 800)
         self.set_resizable(True)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -113,10 +113,12 @@ class CNCDialog(Gtk.Dialog):
         # Entry fields
         def entry_commit_handler(entry, *args):
             pass  # No undo/redo, so nothing needed here
-        for entry in [self.bed_width_entry, self.bed_height_entry, self.servo_up_entry, self.servo_down_entry,
+        for entry in [self.bed_width_entry, self.bed_height_entry,
+                      self.servo_score_entry, self.servo_cut_entry, self.servo_travel_entry,
                       self.servo_delay_entry, self.tool_offset_x_entry, self.tool_offset_y_entry,
                       self.tool_diameter_entry, self.travel_speed_entry, self.cutting_speed_entry, self.scoring_speed_entry,
-                      self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry]:
+                      self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry,
+                      self.z_stepper_cut_entry, self.z_stepper_score_entry, self.z_stepper_travel_entry]:
             entry.connect("changed", auto_save)
             entry.connect("focus-out-event", entry_commit_handler)
             entry.connect("activate", entry_commit_handler)
@@ -314,7 +316,6 @@ class CNCDialog(Gtk.Dialog):
         self.z_mode_combo = Gtk.ComboBoxText()
         self.z_mode_combo.append_text("Servo")
         self.z_mode_combo.append_text("Stepper")
-        self.z_mode_combo.set_active(0)
         z_type_box.pack_start(z_type_label, False, False, 0)
         z_type_box.pack_start(self.z_mode_combo, False, False, 0)
         grid.attach(z_type_box, 0, row, 3, 1)
@@ -325,27 +326,34 @@ class CNCDialog(Gtk.Dialog):
         row += 1
         # Servo fields group
         self.servo_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        # Servo Up Position
-        servo_up_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_up_row.pack_start(Gtk.Label(label="Servo Up Position"), False, False, 0)
-        self.servo_up_entry = Gtk.Entry()
-        servo_up_row.pack_start(self.servo_up_entry, True, True, 0)
-        servo_up_row.pack_start(Gtk.Label(label="°"), False, False, 0)
-        self.servo_box.pack_start(servo_up_row, False, False, 0)
-        # Servo Down Position
-        servo_down_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_down_row.pack_start(Gtk.Label(label="Servo Down Position"), False, False, 0)
-        self.servo_down_entry = Gtk.Entry()
-        servo_down_row.pack_start(self.servo_down_entry, True, True, 0)
-        servo_down_row.pack_start(Gtk.Label(label="°"), False, False, 0)
-        self.servo_box.pack_start(servo_down_row, False, False, 0)
-        # Servo Travel Height
+        # Servo Score Position
+        servo_score_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_score_row.pack_start(Gtk.Label(label="Servo Score Position"), False, False, 0)
+        self.servo_score_entry = Gtk.Entry()
+        servo_score_row.pack_start(self.servo_score_entry, True, True, 0)
+        servo_score_row.pack_start(Gtk.Label(label="°"), False, False, 0)
+        self.servo_box.pack_start(servo_score_row, False, False, 0)
+        # Servo Cut Position
+        servo_cut_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_cut_row.pack_start(Gtk.Label(label="Servo Cut Position"), False, False, 0)
+        self.servo_cut_entry = Gtk.Entry()
+        servo_cut_row.pack_start(self.servo_cut_entry, True, True, 0)
+        servo_cut_row.pack_start(Gtk.Label(label="°"), False, False, 0)
+        self.servo_box.pack_start(servo_cut_row, False, False, 0)
+        # Servo Travel Position
         servo_travel_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_travel_row.pack_start(Gtk.Label(label="Servo Travel Height"), False, False, 0)
+        servo_travel_row.pack_start(Gtk.Label(label="Servo Travel Position"), False, False, 0)
         self.servo_travel_entry = Gtk.Entry()
         servo_travel_row.pack_start(self.servo_travel_entry, True, True, 0)
-        servo_travel_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
+        servo_travel_row.pack_start(Gtk.Label(label="°"), False, False, 0)
         self.servo_box.pack_start(servo_travel_row, False, False, 0)
+        # Servo Delay
+        self.servo_delay_entry = Gtk.Entry()
+        servo_delay_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_delay_row.pack_start(Gtk.Label(label="Servo Delay (ms)"), False, False, 0)
+        servo_delay_row.pack_start(self.servo_delay_entry, True, True, 0)
+        servo_delay_row.pack_start(Gtk.Label(label="ms"), False, False, 0)
+        self.servo_box.pack_start(servo_delay_row, False, False, 0)
         # Stepper fields group
         self.stepper_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         # Stepper Cut Height
@@ -356,9 +364,9 @@ class CNCDialog(Gtk.Dialog):
         stepper_cut_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
         self.stepper_box.pack_start(stepper_cut_row, False, False, 0)
         # Stepper Score Height
+        self.z_stepper_score_entry = Gtk.Entry()
         stepper_score_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         stepper_score_row.pack_start(Gtk.Label(label="Stepper Score Height"), False, False, 0)
-        self.z_stepper_score_entry = Gtk.Entry()
         stepper_score_row.pack_start(self.z_stepper_score_entry, True, True, 0)
         stepper_score_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
         self.stepper_box.pack_start(stepper_score_row, False, False, 0)
@@ -373,7 +381,8 @@ class CNCDialog(Gtk.Dialog):
         def update_z_fields_visibility(combo):
             for child in self.z_fields_stack.get_children():
                 self.z_fields_stack.remove(child)
-            mode = self.z_mode_combo.get_active_text().lower()
+            mode_text = self.z_mode_combo.get_active_text()
+            mode = mode_text.lower() if mode_text else "servo"
             if mode == "servo":
                 self.z_fields_stack.pack_start(self.servo_box, False, False, 0)
             else:
@@ -427,7 +436,6 @@ class CNCDialog(Gtk.Dialog):
         speeds_label.set_markup('<b>Speeds</b>')
         speeds_label.set_halign(Gtk.Align.START)
         grid.attach(speeds_label, 0, row, 3, 1)
-        row += 1
         # Speeds (all in mm/s)
         grid.attach(Gtk.Label(label="Travel Speed (Cutter Up)"), 0, row, 1, 1)
         self.travel_speed_entry = Gtk.Entry()
@@ -490,7 +498,8 @@ class CNCDialog(Gtk.Dialog):
 
         # Show/hide Z velocity field based on Z mode
         def update_z_velocity_visibility():
-            mode = self.z_mode_combo.get_active_text().lower()
+            mode_text = self.z_mode_combo.get_active_text()
+            mode = mode_text.lower() if mode_text else "servo"
             visible = (mode == "stepper")
             self.max_velocity_z_entry.set_visible(visible)
             # Also hide/show the label next to it
@@ -527,63 +536,111 @@ class CNCDialog(Gtk.Dialog):
 
     def create_home_tab(self):
         """Creates the Home tab with a 2D G-code preview, generated G-code panel, and log panel."""
-        main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        # --- 2D G-code preview (large left panel) ---
+        # Main container - use a vertical box for the entire tab
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        
+        # Top section: Preview and G-code/log panels
+        top_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        top_hbox.set_hexpand(True)
+        top_hbox.set_vexpand(True)
+        
+        # --- 2D G-code preview (left panel) ---
         preview_frame = Gtk.Frame()
-        preview_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        preview_frame.set_shadow_type(Gtk.ShadowType.IN)
+        preview_frame.set_hexpand(True)
+        preview_frame.set_vexpand(True)
+        
+        # Create a box to contain the preview with a placeholder
+        preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        
+        # Add a placeholder label that will be shown when no preview is available
+        self.preview_placeholder = Gtk.Label()
+        self.preview_placeholder.set_markup("<i>Generate G-code to see preview</i>")
+        self.preview_placeholder.set_vexpand(True)
+        self.preview_placeholder.set_hexpand(True)
+        self.preview_placeholder.set_valign(Gtk.Align.CENTER)
+        self.preview_placeholder.set_halign(Gtk.Align.CENTER)
+        preview_box.pack_start(self.preview_placeholder, True, True, 0)
+        
         self.gcode_preview = Gtk.DrawingArea()
         self.gcode_preview.set_size_request(500, 400)
         self.gcode_preview.set_hexpand(True)
         self.gcode_preview.set_vexpand(True)
         self.gcode_preview.connect("draw", self.on_gcode_preview_draw)
-        self.gcode_preview.add_events(Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK)
+        
+        # Initially hide the preview drawing area
+        self.gcode_preview.hide()
+        
+        # Attach events directly to DrawingArea
+        self.gcode_preview.add_events(
+            Gdk.EventMask.SCROLL_MASK | 
+            Gdk.EventMask.BUTTON_PRESS_MASK | 
+            Gdk.EventMask.BUTTON_RELEASE_MASK | 
+            Gdk.EventMask.POINTER_MOTION_MASK
+        )
         self.gcode_preview.connect("scroll-event", self.on_gcode_preview_scroll)
         self.gcode_preview.connect("button-press-event", self.on_gcode_preview_button_press)
         self.gcode_preview.connect("button-release-event", self.on_gcode_preview_button_release)
         self.gcode_preview.connect("motion-notify-event", self.on_gcode_preview_motion)
-        preview_vbox.pack_start(self.gcode_preview, True, True, 0)
-        preview_frame.add(preview_vbox)
-        main_hbox.pack_start(preview_frame, True, True, 0)
-        # --- Right side: G-code panel (top) and log panel (bottom) ---
+        
+        preview_box.pack_start(self.gcode_preview, True, True, 0)
+        preview_frame.add(preview_box)
+        top_hbox.pack_start(preview_frame, True, True, 0)
+        
+        # --- Right side: Vertical container for G-code and log panels ---
         right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        right_vbox.set_size_request(340, -1)  # Fixed width, flexible height
+        
         # G-code panel (top)
         gcode_frame = Gtk.Frame()
+        gcode_frame.set_shadow_type(Gtk.ShadowType.IN)
         gcode_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.gcode_text_buffer = Gtk.TextBuffer()
         self.gcode_text_view = Gtk.TextView(buffer=self.gcode_text_buffer)
         self.gcode_text_view.set_editable(True)
         self.gcode_text_view.set_cursor_visible(True)
         self.gcode_text_view.set_monospace(True)
+        
         gcode_scroll = Gtk.ScrolledWindow()
         gcode_scroll.set_hexpand(True)
         gcode_scroll.set_vexpand(True)
-        gcode_scroll.set_size_request(320, 220)
+        gcode_scroll.set_min_content_height(220)
         gcode_scroll.add(self.gcode_text_view)
+        
         gcode_vbox.pack_start(gcode_scroll, True, True, 0)
         gcode_frame.add(gcode_vbox)
         right_vbox.pack_start(gcode_frame, True, True, 0)
+        
         # Log panel (bottom)
         log_frame = Gtk.Frame()
-        log_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)  # Reduce spacing
+        log_frame.set_shadow_type(Gtk.ShadowType.IN)
+        log_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.log_buffer = Gtk.TextBuffer()
         self.log_view = Gtk.TextView(buffer=self.log_buffer)
         self.log_view.set_editable(False)
         self.log_view.set_cursor_visible(False)
         self.log_view.set_monospace(True)
+        
         log_scroll = Gtk.ScrolledWindow()
         log_scroll.set_hexpand(True)
         log_scroll.set_vexpand(True)
-        log_scroll.set_size_request(320, 120)
+        log_scroll.set_min_content_height(80)
         log_scroll.add(self.log_view)
+        
         log_vbox.pack_start(log_scroll, True, True, 0)
         log_frame.add(log_vbox)
         right_vbox.pack_start(log_frame, True, True, 0)
-        main_hbox.pack_start(right_vbox, True, True, 0)
-        self.notebook.insert_page(main_hbox, Gtk.Label(label="Home"), 0)
+        
+        top_hbox.pack_start(right_vbox, False, False, 0)
+        main_vbox.pack_start(top_hbox, True, True, 0)
+        
+        # Initialize preview state
         self.gcode_preview_zoom = 1.0
         self.gcode_preview_offset = [0, 0]
         self.gcode_preview_drag = False
         self.gcode_preview_last = (0, 0)
+        
+        self.notebook.insert_page(main_vbox, Gtk.Label(label="Home"), 0)
 
     def create_button_panel(self):
         """Creates the bottom row with Generate and Export G-code buttons only, with a progress overlay on Generate."""
@@ -605,6 +662,7 @@ class CNCDialog(Gtk.Dialog):
         self.generate_button_overlay.add_overlay(self.progress_haze)
         self.progress_fraction = 0.0
         self.progress_animating = False
+        self.progress_haze.hide()  # Ensure haze is hidden at startup
         button_box.pack_end(self.generate_button_overlay, False, False, 0)
 
         # --- Export G-code button ---
@@ -820,10 +878,9 @@ class CNCDialog(Gtk.Dialog):
         elif origin == "back_right": self.origin_back_right.set_active(True)
         else: self.origin_front_left.set_active(True)
         # Servo
-        self.servo_up_entry.set_text(c.get("servo_up", "90"))
-        self.servo_down_entry.set_text(c.get("servo_down", "45"))
-        self.servo_delay_entry = getattr(self, 'servo_delay_entry', Gtk.Entry())  # fallback for missing field
-        self.servo_delay_entry.set_text(c.get("servo_delay", "200"))
+        self.servo_score_entry.set_text(c.get("servo_score", "60"))
+        self.servo_cut_entry.set_text(c.get("servo_cut", "45"))
+        self.servo_travel_entry.set_text(c.get("servo_travel", "120"))
         # Tool
         self.tool_offset_x_entry.set_text(c.get("tool_offset_x", "0"))
         self.tool_offset_y_entry.set_text(c.get("tool_offset_y", "0"))
@@ -858,10 +915,16 @@ class CNCDialog(Gtk.Dialog):
                     update_z_fields_visibility(self)
             except Exception:
                 pass
-        self.z_stepper_cut_entry.set_text(c.get("z_stepper_cut_height", "-2"))
-        self.z_stepper_travel_entry.set_text(c.get("z_stepper_travel_height", "5"))
+        if hasattr(self, "z_stepper_cut_entry"): self.z_stepper_cut_entry.set_text(c.get("z_stepper_cut_height", "-2.0"))
+        if hasattr(self, "z_stepper_score_entry"): self.z_stepper_score_entry.set_text(c.get("z_stepper_score_height", "10"))
+        if hasattr(self, "z_stepper_travel_entry"): self.z_stepper_travel_entry.set_text(c.get("z_stepper_travel_height", "5.0"))
         # Spindle Speed
         self.spindle_speed_entry.set_text(c.get("spindle_speed", "10000"))
+        # Units and additional settings
+        if hasattr(self, "units_combo"): self.units_combo.set_active(int(c.get("units", 0)))
+        if hasattr(self, "plunge_speed_entry"): self.plunge_speed_entry.set_text(c.get("plunge_speed", "500"))
+        if hasattr(self, "score_line_color"): self.score_line_color = c.get("score_line_color", "#00FF00")
+        if hasattr(self, "cut_line_color"): self.cut_line_color = c.get("cut_line_color", "#FF0000")
 
     def get_config_from_ui(self):
         """Gathers all values from the UI and returns a config dictionary. Stores speeds in mm/s (no conversion)."""
@@ -881,10 +944,11 @@ class CNCDialog(Gtk.Dialog):
             config["origin_point"] = "back_right"
         else:
             config["origin_point"] = "front_left"
-        # Servo
-        config["servo_up"] = self.servo_up_entry.get_text()
-        config["servo_down"] = self.servo_down_entry.get_text()
+        # Servo (only new fields)
         config["servo_delay"] = self.servo_delay_entry.get_text()
+        config["servo_score"] = self.servo_score_entry.get_text()
+        config["servo_cut"] = self.servo_cut_entry.get_text()
+        config["servo_travel"] = self.servo_travel_entry.get_text()
         # Tool
         config["tool_offset_x"] = self.tool_offset_x_entry.get_text()
         config["tool_offset_y"] = self.tool_offset_y_entry.get_text()
@@ -908,10 +972,16 @@ class CNCDialog(Gtk.Dialog):
         # Z Axis Mode
         config["z_mode"] = self.z_mode_combo.get_active_text().lower()
         # Stepper Z values
-        config["z_stepper_cut_height"] = self.z_stepper_cut_entry.get_text()
-        config["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text()
+        config["z_stepper_cut_height"] = self.z_stepper_cut_entry.get_text() if hasattr(self, "z_stepper_cut_entry") else "-2.0"
+        config["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text() if hasattr(self, "z_stepper_travel_entry") else "5.0"
+        config["z_stepper_score_height"] = self.z_stepper_score_entry.get_text() if hasattr(self, "z_stepper_score_entry") else "10"
         # Spindle Speed
         config["spindle_speed"] = self.spindle_speed_entry.get_text()
+        # Additional settings
+        config["units"] = getattr(self, "units_combo", None).get_active() if hasattr(self, "units_combo") else 0
+        config["plunge_speed"] = getattr(self, "plunge_speed_entry", None).get_text() if hasattr(self, "plunge_speed_entry") else "500"
+        config["score_line_color"] = getattr(self, "score_line_color", None) if hasattr(self, "score_line_color") else "#00FF00"
+        config["cut_line_color"] = getattr(self, "cut_line_color", None) if hasattr(self, "cut_line_color") else "#FF0000"
         return config
 
     def _create_hamburger_menu(self):
@@ -978,10 +1048,16 @@ class CNCDialog(Gtk.Dialog):
             self.generated_cut_paths = cut_paths
             self.generated_score_paths = score_paths
             self.gcode_generated = True
+            # Show the preview and hide placeholder
+            self.gcode_preview.show()
+            self.preview_placeholder.hide()
         else:
             self.generated_cut_paths = None
             self.generated_score_paths = None
             self.gcode_generated = False
+            # Hide the preview and show placeholder
+            self.gcode_preview.hide()
+            self.preview_placeholder.show()
         self.gcode_preview.queue_draw()
 
     def on_generate_gcode_clicked(self, button):
@@ -1043,20 +1119,17 @@ class CNCDialog(Gtk.Dialog):
 
     def on_gcode_preview_draw(self, widget, cr):
         """Draws a 2D preview of the generated G-code toolpaths, including the cutter bed, grid, and origin with red/green arrows."""
+        # Fill the entire drawing area with white to ensure no transparency
+        w, h = widget.get_allocated_width(), widget.get_allocated_height()
+        cr.save()
+        cr.set_source_rgb(1, 1, 1)
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
+        cr.restore()
         config = self.get_config_from_ui()
         bed_w = float(config.get("bed_width", 300))
         bed_h = float(config.get("bed_height", 200))
         margin = float(config.get("safety_margin", 5))
-        w, h = widget.get_allocated_width(), widget.get_allocated_height()
-        # Get bed size
-        try:
-            bed_w = float(config.get("bed_width", 300))
-        except Exception:
-            bed_w = 300
-        try:
-            bed_h = float(config.get("bed_height", 200))
-        except Exception:
-            bed_h = 200
         # Calculate scale and offset to fit bed in preview
         scale = min(w / bed_w, h / bed_h) * 0.9
         offset_x = (w - bed_w * scale) / 2
