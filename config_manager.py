@@ -98,9 +98,9 @@ class ConfigManager:
             "units": 0, # 0 for mm, 1 for inches
             "origin_point": "bottom_left",
             "safety_margin": "5",
-            "servo_up": "90",
-            "servo_down": "45",
             "servo_score": "60",
+            "servo_cut": "45",
+            "servo_travel": "120",
             "servo_delay": "200",
             "tool_offset_x": "0",
             "tool_offset_y": "0",
@@ -114,16 +114,13 @@ class ConfigManager:
             "max_velocity_z": "5000",
             "max_acceleration": "100",
             "jerk": "10",
-            "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\nM3 S{servo_up}\nG4 P{servo_delay}",
-            "end_gcode": "; End G-code\nM3 S{servo_up}\nG4 P{servo_delay}\nG0 X0 Y0\nM2 ; Program end",
+            "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\nM3 S{servo_travel}\nG4 P{servo_delay}",
+            "end_gcode": "; End G-code\nM3 S{servo_travel}\nG4 P{servo_delay}\nG0 X0 Y0\nM2 ; Program end",
             "z_mode": "servo",  # 'servo' or 'stepper'
             "z_stepper_cut_height": "-2.0",
             "z_stepper_score_height": "-0.5",
             "z_stepper_travel_height": "5.0",
             "spindle_speed": "10000",
-            # --- Source Options Colors ---
-            "score_line_color": "#00FF00",
-            "cut_line_color": "#FF0000",
         }
 
     def get_last_export_info(self):

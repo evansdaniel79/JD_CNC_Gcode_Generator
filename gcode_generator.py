@@ -113,10 +113,12 @@ class CNCDialog(Gtk.Dialog):
         # Entry fields
         def entry_commit_handler(entry, *args):
             pass  # No undo/redo, so nothing needed here
-        for entry in [self.bed_width_entry, self.bed_height_entry, self.servo_up_entry, self.servo_down_entry,
+        for entry in [self.bed_width_entry, self.bed_height_entry,
+                      self.servo_score_entry, self.servo_cut_entry, self.servo_travel_entry,
                       self.servo_delay_entry, self.tool_offset_x_entry, self.tool_offset_y_entry,
                       self.tool_diameter_entry, self.travel_speed_entry, self.cutting_speed_entry, self.scoring_speed_entry,
-                      self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry]:
+                      self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry,
+                      self.z_stepper_cut_entry, self.z_stepper_score_entry, self.z_stepper_travel_entry]:
             entry.connect("changed", auto_save)
             entry.connect("focus-out-event", entry_commit_handler)
             entry.connect("activate", entry_commit_handler)
@@ -314,7 +316,6 @@ class CNCDialog(Gtk.Dialog):
         self.z_mode_combo = Gtk.ComboBoxText()
         self.z_mode_combo.append_text("Servo")
         self.z_mode_combo.append_text("Stepper")
-        self.z_mode_combo.set_active(0)
         z_type_box.pack_start(z_type_label, False, False, 0)
         z_type_box.pack_start(self.z_mode_combo, False, False, 0)
         grid.attach(z_type_box, 0, row, 3, 1)
@@ -325,27 +326,34 @@ class CNCDialog(Gtk.Dialog):
         row += 1
         # Servo fields group
         self.servo_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        # Servo Up Position
-        servo_up_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_up_row.pack_start(Gtk.Label(label="Servo Up Position"), False, False, 0)
-        self.servo_up_entry = Gtk.Entry()
-        servo_up_row.pack_start(self.servo_up_entry, True, True, 0)
-        servo_up_row.pack_start(Gtk.Label(label="°"), False, False, 0)
-        self.servo_box.pack_start(servo_up_row, False, False, 0)
-        # Servo Down Position
-        servo_down_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_down_row.pack_start(Gtk.Label(label="Servo Down Position"), False, False, 0)
-        self.servo_down_entry = Gtk.Entry()
-        servo_down_row.pack_start(self.servo_down_entry, True, True, 0)
-        servo_down_row.pack_start(Gtk.Label(label="°"), False, False, 0)
-        self.servo_box.pack_start(servo_down_row, False, False, 0)
-        # Servo Travel Height
+        # Servo Score Position
+        servo_score_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_score_row.pack_start(Gtk.Label(label="Servo Score Position"), False, False, 0)
+        self.servo_score_entry = Gtk.Entry()
+        servo_score_row.pack_start(self.servo_score_entry, True, True, 0)
+        servo_score_row.pack_start(Gtk.Label(label="°"), False, False, 0)
+        self.servo_box.pack_start(servo_score_row, False, False, 0)
+        # Servo Cut Position
+        servo_cut_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_cut_row.pack_start(Gtk.Label(label="Servo Cut Position"), False, False, 0)
+        self.servo_cut_entry = Gtk.Entry()
+        servo_cut_row.pack_start(self.servo_cut_entry, True, True, 0)
+        servo_cut_row.pack_start(Gtk.Label(label="°"), False, False, 0)
+        self.servo_box.pack_start(servo_cut_row, False, False, 0)
+        # Servo Travel Position
         servo_travel_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        servo_travel_row.pack_start(Gtk.Label(label="Servo Travel Height"), False, False, 0)
+        servo_travel_row.pack_start(Gtk.Label(label="Servo Travel Position"), False, False, 0)
         self.servo_travel_entry = Gtk.Entry()
         servo_travel_row.pack_start(self.servo_travel_entry, True, True, 0)
-        servo_travel_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
+        servo_travel_row.pack_start(Gtk.Label(label="°"), False, False, 0)
         self.servo_box.pack_start(servo_travel_row, False, False, 0)
+        # Servo Delay
+        self.servo_delay_entry = Gtk.Entry()
+        servo_delay_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        servo_delay_row.pack_start(Gtk.Label(label="Servo Delay (ms)"), False, False, 0)
+        servo_delay_row.pack_start(self.servo_delay_entry, True, True, 0)
+        servo_delay_row.pack_start(Gtk.Label(label="ms"), False, False, 0)
+        self.servo_box.pack_start(servo_delay_row, False, False, 0)
         # Stepper fields group
         self.stepper_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         # Stepper Cut Height
@@ -356,9 +364,9 @@ class CNCDialog(Gtk.Dialog):
         stepper_cut_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
         self.stepper_box.pack_start(stepper_cut_row, False, False, 0)
         # Stepper Score Height
+        self.z_stepper_score_entry = Gtk.Entry()
         stepper_score_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         stepper_score_row.pack_start(Gtk.Label(label="Stepper Score Height"), False, False, 0)
-        self.z_stepper_score_entry = Gtk.Entry()
         stepper_score_row.pack_start(self.z_stepper_score_entry, True, True, 0)
         stepper_score_row.pack_start(Gtk.Label(label="mm"), False, False, 0)
         self.stepper_box.pack_start(stepper_score_row, False, False, 0)
@@ -373,7 +381,8 @@ class CNCDialog(Gtk.Dialog):
         def update_z_fields_visibility(combo):
             for child in self.z_fields_stack.get_children():
                 self.z_fields_stack.remove(child)
-            mode = self.z_mode_combo.get_active_text().lower()
+            mode_text = self.z_mode_combo.get_active_text()
+            mode = mode_text.lower() if mode_text else "servo"
             if mode == "servo":
                 self.z_fields_stack.pack_start(self.servo_box, False, False, 0)
             else:
@@ -427,7 +436,6 @@ class CNCDialog(Gtk.Dialog):
         speeds_label.set_markup('<b>Speeds</b>')
         speeds_label.set_halign(Gtk.Align.START)
         grid.attach(speeds_label, 0, row, 3, 1)
-        row += 1
         # Speeds (all in mm/s)
         grid.attach(Gtk.Label(label="Travel Speed (Cutter Up)"), 0, row, 1, 1)
         self.travel_speed_entry = Gtk.Entry()
@@ -490,7 +498,8 @@ class CNCDialog(Gtk.Dialog):
 
         # Show/hide Z velocity field based on Z mode
         def update_z_velocity_visibility():
-            mode = self.z_mode_combo.get_active_text().lower()
+            mode_text = self.z_mode_combo.get_active_text()
+            mode = mode_text.lower() if mode_text else "servo"
             visible = (mode == "stepper")
             self.max_velocity_z_entry.set_visible(visible)
             # Also hide/show the label next to it
@@ -869,10 +878,9 @@ class CNCDialog(Gtk.Dialog):
         elif origin == "back_right": self.origin_back_right.set_active(True)
         else: self.origin_front_left.set_active(True)
         # Servo
-        self.servo_up_entry.set_text(c.get("servo_up", "90"))
-        self.servo_down_entry.set_text(c.get("servo_down", "45"))
-        self.servo_delay_entry = getattr(self, 'servo_delay_entry', Gtk.Entry())  # fallback for missing field
-        self.servo_delay_entry.set_text(c.get("servo_delay", "200"))
+        self.servo_score_entry.set_text(c.get("servo_score", "60"))
+        self.servo_cut_entry.set_text(c.get("servo_cut", "45"))
+        self.servo_travel_entry.set_text(c.get("servo_travel", "120"))
         # Tool
         self.tool_offset_x_entry.set_text(c.get("tool_offset_x", "0"))
         self.tool_offset_y_entry.set_text(c.get("tool_offset_y", "0"))
@@ -907,10 +915,16 @@ class CNCDialog(Gtk.Dialog):
                     update_z_fields_visibility(self)
             except Exception:
                 pass
-        self.z_stepper_cut_entry.set_text(c.get("z_stepper_cut_height", "-2"))
-        self.z_stepper_travel_entry.set_text(c.get("z_stepper_travel_height", "5"))
+        if hasattr(self, "z_stepper_cut_entry"): self.z_stepper_cut_entry.set_text(c.get("z_stepper_cut_height", "-2.0"))
+        if hasattr(self, "z_stepper_score_entry"): self.z_stepper_score_entry.set_text(c.get("z_stepper_score_height", "10"))
+        if hasattr(self, "z_stepper_travel_entry"): self.z_stepper_travel_entry.set_text(c.get("z_stepper_travel_height", "5.0"))
         # Spindle Speed
         self.spindle_speed_entry.set_text(c.get("spindle_speed", "10000"))
+        # Units and additional settings
+        if hasattr(self, "units_combo"): self.units_combo.set_active(int(c.get("units", 0)))
+        if hasattr(self, "plunge_speed_entry"): self.plunge_speed_entry.set_text(c.get("plunge_speed", "500"))
+        if hasattr(self, "score_line_color"): self.score_line_color = c.get("score_line_color", "#00FF00")
+        if hasattr(self, "cut_line_color"): self.cut_line_color = c.get("cut_line_color", "#FF0000")
 
     def get_config_from_ui(self):
         """Gathers all values from the UI and returns a config dictionary. Stores speeds in mm/s (no conversion)."""
@@ -930,10 +944,11 @@ class CNCDialog(Gtk.Dialog):
             config["origin_point"] = "back_right"
         else:
             config["origin_point"] = "front_left"
-        # Servo
-        config["servo_up"] = self.servo_up_entry.get_text()
-        config["servo_down"] = self.servo_down_entry.get_text()
+        # Servo (only new fields)
         config["servo_delay"] = self.servo_delay_entry.get_text()
+        config["servo_score"] = self.servo_score_entry.get_text()
+        config["servo_cut"] = self.servo_cut_entry.get_text()
+        config["servo_travel"] = self.servo_travel_entry.get_text()
         # Tool
         config["tool_offset_x"] = self.tool_offset_x_entry.get_text()
         config["tool_offset_y"] = self.tool_offset_y_entry.get_text()
@@ -957,10 +972,16 @@ class CNCDialog(Gtk.Dialog):
         # Z Axis Mode
         config["z_mode"] = self.z_mode_combo.get_active_text().lower()
         # Stepper Z values
-        config["z_stepper_cut_height"] = self.z_stepper_cut_entry.get_text()
-        config["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text()
+        config["z_stepper_cut_height"] = self.z_stepper_cut_entry.get_text() if hasattr(self, "z_stepper_cut_entry") else "-2.0"
+        config["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text() if hasattr(self, "z_stepper_travel_entry") else "5.0"
+        config["z_stepper_score_height"] = self.z_stepper_score_entry.get_text() if hasattr(self, "z_stepper_score_entry") else "10"
         # Spindle Speed
         config["spindle_speed"] = self.spindle_speed_entry.get_text()
+        # Additional settings
+        config["units"] = getattr(self, "units_combo", None).get_active() if hasattr(self, "units_combo") else 0
+        config["plunge_speed"] = getattr(self, "plunge_speed_entry", None).get_text() if hasattr(self, "plunge_speed_entry") else "500"
+        config["score_line_color"] = getattr(self, "score_line_color", None) if hasattr(self, "score_line_color") else "#00FF00"
+        config["cut_line_color"] = getattr(self, "cut_line_color", None) if hasattr(self, "cut_line_color") else "#FF0000"
         return config
 
     def _create_hamburger_menu(self):
