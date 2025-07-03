@@ -25,7 +25,7 @@ class CNCDialog(Gtk.Dialog):
         self.effect = effect
         
         # Initialize backend components
-        self.config_manager = ConfigManager()
+        self.config_manager = ConfigManager("JD_CNC_Gcode_Generator")
         self.svg_parser = SVGParser(effect.svg)
         self.gcode_logic = GCodeLogic()
         
@@ -430,12 +430,12 @@ class CNCDialog(Gtk.Dialog):
     def create_speeds_and_limits_tab(self):
         """Creates a combined Speeds & Machine Limits tab with section headers and unit labels in mm/s and mm/s²."""
         frame, grid = self.create_frame("")
-        row = 0
+        row = 1
         # Speeds Section Header
         speeds_label = Gtk.Label()
         speeds_label.set_markup('<b>Speeds</b>')
         speeds_label.set_halign(Gtk.Align.START)
-        grid.attach(speeds_label, 0, row, 3, 1)
+        grid.attach(speeds_label, 0, 0, 3, 1) # changed parameter 3 from row to 0
         # Speeds (all in mm/s)
         grid.attach(Gtk.Label(label="Travel Speed (Cutter Up)"), 0, row, 1, 1)
         self.travel_speed_entry = Gtk.Entry()
