@@ -587,10 +587,11 @@ class CNCDialog(Gtk.Dialog):
         preview_frame.add(preview_box)
         top_hbox.pack_start(preview_frame, True, True, 0)
         
-        # --- Right side: Vertical container for G-code and log panels ---
+        # # --- Right side: Vertical container for G-code and log panels ---
         right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        right_vbox.set_size_request(340, -1)  # Fixed width, flexible height
-        
+        # right_vbox.set_size_request(340, -1)  # Fixed width, flexible height
+        right_vbox.set_hexpand(True)
+
         # G-code panel (top)
         gcode_frame = Gtk.Frame()
         gcode_frame.set_shadow_type(Gtk.ShadowType.IN)
@@ -604,7 +605,7 @@ class CNCDialog(Gtk.Dialog):
         gcode_scroll = Gtk.ScrolledWindow()
         gcode_scroll.set_hexpand(True)
         gcode_scroll.set_vexpand(True)
-        gcode_scroll.set_min_content_height(220)
+        gcode_scroll.set_min_content_height(500)
         gcode_scroll.add(self.gcode_text_view)
         
         gcode_vbox.pack_start(gcode_scroll, True, True, 0)
@@ -631,7 +632,7 @@ class CNCDialog(Gtk.Dialog):
         log_frame.add(log_vbox)
         right_vbox.pack_start(log_frame, True, True, 0)
         
-        top_hbox.pack_start(right_vbox, False, False, 0)
+        top_hbox.pack_start(right_vbox, True, True, 0)
         main_vbox.pack_start(top_hbox, True, True, 0)
         
         # Initialize preview state
