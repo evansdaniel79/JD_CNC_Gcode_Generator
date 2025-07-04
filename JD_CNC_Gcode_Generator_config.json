@@ -2,9 +2,11 @@
     "last": {
         "bed_width": "250",
         "bed_height": "250",
-        "origin_point": "back_left",
-        "servo_travel": "120",
+        "origin_point": "center",
         "servo_delay": "200",
+        "servo_score": "60",
+        "servo_cut": "45",
+        "servo_travel": "120",
         "tool_offset_x": "0",
         "tool_offset_y": "0",
         "tool_diameter": "0.6",
