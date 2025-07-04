@@ -536,24 +536,21 @@ class CNCDialog(Gtk.Dialog):
 
     def create_home_tab(self):
         """Creates the Home tab with a 2D G-code preview, generated G-code panel, and log panel."""
-        # Main container - use a vertical box for the entire tab
+        # Main vertical container
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        
-        # Top section: Preview and G-code/log panels
+
+        # Horizontal container for preview and right panel
         top_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         top_hbox.set_hexpand(True)
         top_hbox.set_vexpand(True)
-        
-        # --- 2D G-code preview (left panel) ---
+
+        # --- 2D G-code preview (left) ---
         preview_frame = Gtk.Frame()
         preview_frame.set_shadow_type(Gtk.ShadowType.IN)
         preview_frame.set_hexpand(True)
         preview_frame.set_vexpand(True)
-        
-        # Create a box to contain the preview with a placeholder
+
         preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        
-        # Add a placeholder label that will be shown when no preview is available
         self.preview_placeholder = Gtk.Label()
         self.preview_placeholder.set_markup("<i>Generate G-code to see preview</i>")
         self.preview_placeholder.set_vexpand(True)
@@ -561,17 +558,13 @@ class CNCDialog(Gtk.Dialog):
         self.preview_placeholder.set_valign(Gtk.Align.CENTER)
         self.preview_placeholder.set_halign(Gtk.Align.CENTER)
         preview_box.pack_start(self.preview_placeholder, True, True, 0)
-        
+
         self.gcode_preview = Gtk.DrawingArea()
         self.gcode_preview.set_size_request(500, 400)
         self.gcode_preview.set_hexpand(True)
         self.gcode_preview.set_vexpand(True)
         self.gcode_preview.connect("draw", self.on_gcode_preview_draw)
-        
-        # Initially hide the preview drawing area
         self.gcode_preview.hide()
-        
-        # Attach events directly to DrawingArea
         self.gcode_preview.add_events(
             Gdk.EventMask.SCROLL_MASK | 
             Gdk.EventMask.BUTTON_PRESS_MASK | 
@@ -582,17 +575,15 @@ class CNCDialog(Gtk.Dialog):
         self.gcode_preview.connect("button-press-event", self.on_gcode_preview_button_press)
         self.gcode_preview.connect("button-release-event", self.on_gcode_preview_button_release)
         self.gcode_preview.connect("motion-notify-event", self.on_gcode_preview_motion)
-        
         preview_box.pack_start(self.gcode_preview, True, True, 0)
         preview_frame.add(preview_box)
         top_hbox.pack_start(preview_frame, True, True, 0)
-        
-        # # --- Right side: Vertical container for G-code and log panels ---
+
+        # --- Right panel: G-code and log ---
         right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        # right_vbox.set_size_request(340, -1)  # Fixed width, flexible height
         right_vbox.set_hexpand(True)
 
-        # G-code panel (top)
+        # G-code panel
         gcode_frame = Gtk.Frame()
         gcode_frame.set_shadow_type(Gtk.ShadowType.IN)
         gcode_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -601,18 +592,16 @@ class CNCDialog(Gtk.Dialog):
         self.gcode_text_view.set_editable(True)
         self.gcode_text_view.set_cursor_visible(True)
         self.gcode_text_view.set_monospace(True)
-        
         gcode_scroll = Gtk.ScrolledWindow()
         gcode_scroll.set_hexpand(True)
         gcode_scroll.set_vexpand(True)
         gcode_scroll.set_min_content_height(500)
         gcode_scroll.add(self.gcode_text_view)
-        
         gcode_vbox.pack_start(gcode_scroll, True, True, 0)
         gcode_frame.add(gcode_vbox)
         right_vbox.pack_start(gcode_frame, True, True, 0)
-        
-        # Log panel (bottom)
+
+        # Log panel
         log_frame = Gtk.Frame()
         log_frame.set_shadow_type(Gtk.ShadowType.IN)
         log_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -621,26 +610,24 @@ class CNCDialog(Gtk.Dialog):
         self.log_view.set_editable(False)
         self.log_view.set_cursor_visible(False)
         self.log_view.set_monospace(True)
-        
         log_scroll = Gtk.ScrolledWindow()
         log_scroll.set_hexpand(True)
         log_scroll.set_vexpand(True)
         log_scroll.set_min_content_height(80)
         log_scroll.add(self.log_view)
-        
         log_vbox.pack_start(log_scroll, True, True, 0)
         log_frame.add(log_vbox)
         right_vbox.pack_start(log_frame, True, True, 0)
-        
+
         top_hbox.pack_start(right_vbox, True, True, 0)
         main_vbox.pack_start(top_hbox, True, True, 0)
-        
+
         # Initialize preview state
         self.gcode_preview_zoom = 1.0
         self.gcode_preview_offset = [0, 0]
         self.gcode_preview_drag = False
         self.gcode_preview_last = (0, 0)
-        
+
         self.notebook.insert_page(main_vbox, Gtk.Label(label="Home"), 0)
 
     def create_button_panel(self):
