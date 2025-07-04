@@ -1,1 +1,2 @@
+<img src="jd_logo.png">
 This project is an Inkscape extension for generating CNC G-code from SVG drawings, designed to support both cutting and scoring operations with customizable machine and tool settings. It features a modern GTK-based user interface for configuring bed size, tool offsets, speeds, and G-code templates, along with real-time previews and export functionality. The extension ensures user-friendly operation, safety checks, and compatibility with a variety of CNC machines.
