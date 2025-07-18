@@ -1,6 +1,2 @@
 # Ignore Python cache and IDE folders
 __pycache__/*
-*.py[cod]
-*.pyo
-*.pyd
-.idea/

@@ -119,9 +119,9 @@ class GCodeLogic:
                         dist = ((start_point[0] - last_point[0]) ** 2 + (start_point[1] - last_point[1]) ** 2) ** 0.5
                         stats["distance"] += dist
                         stats["time"] += dist / travel_speed if travel_speed else 0
-                    gcode.append(f"M3 S{servo_travel_angle} ; Tool up (travel)")
+                    gcode.append(f"M280 P0 S{servo_travel_angle} ; Tool up (travel)")
                     gcode.append(f"G0 F{travel_speed} X{start_point[0]:.3f} Y{start_point[1]:.3f}")
-                    gcode.append(f"M3 S{servo_angle} ; Tool {process_type}")
+                    gcode.append(f"M280 P0 S{servo_angle} ; Tool {process_type}")
                     gcode.append(f"G4 P{servo_delay} ; Wait for servo")
                     stats["tool_changes"] += 1
                     last = start_point
@@ -132,7 +132,7 @@ class GCodeLogic:
                         stats["time"] += dist / speed if speed else 0
                         gcode.append(f"G1 F{speed} X{p[0]:.3f} Y{p[1]:.3f}")
                         last = p
-                    gcode.append(f"M3 S{servo_travel_angle} ; Tool up (travel)")
+                    gcode.append(f"M280 P0 S{servo_travel_angle} ; Tool up (travel)")
                     last_point = sub[-1]
             return gcode, stats
 
