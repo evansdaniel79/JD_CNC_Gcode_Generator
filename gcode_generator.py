@@ -150,7 +150,7 @@ class CNCDialog(Gtk.Dialog):
         for entry in [self.bed_width_entry, self.bed_height_entry,
                       self.servo_score_entry, self.servo_cut_entry, self.servo_travel_entry,
                       self.servo_delay_entry, self.tool_offset_x_entry, self.tool_offset_y_entry,
-                      self.tool_diameter_entry, self.travel_speed_entry, self.cutting_speed_entry, self.scoring_speed_entry,
+                      self.tool_diameter_entry, self.travel_speed_entry, self.z_plunge_speed_entry, self.z_raise_speed_entry, self.cutting_speed_entry, self.scoring_speed_entry,
                       self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry,
                       self.z_stepper_cut_entry, self.z_stepper_score_entry, self.z_stepper_travel_entry]:
             entry.connect("changed", auto_save)
@@ -488,6 +488,16 @@ class CNCDialog(Gtk.Dialog):
         grid.attach(Gtk.Label(label="Scoring Speed (Red Lines)"), 0, row, 1, 1)
         self.scoring_speed_entry = Gtk.Entry()
         grid.attach(self.scoring_speed_entry, 1, row, 1, 1)
+        grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
+        row += 1
+        grid.attach(Gtk.Label(label="Z Plunge Speed (Down)"), 0, row, 1, 1)
+        self.z_plunge_speed_entry = Gtk.Entry()
+        grid.attach(self.z_plunge_speed_entry, 1, row, 1, 1)
+        grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
+        row += 1
+        grid.attach(Gtk.Label(label="Z Raise Speed (Up)"), 0, row, 1, 1)
+        self.z_raise_speed_entry = Gtk.Entry()
+        grid.attach(self.z_raise_speed_entry, 1, row, 1, 1)
         grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
         row += 1
         # Limits Section Header
@@ -997,6 +1007,8 @@ class CNCDialog(Gtk.Dialog):
         self.tool_diameter_entry.set_text(c.get("tool_diameter", "1"))
         # Speeds (set as mm/s)
         self.travel_speed_entry.set_text(c.get("travel_speed", "3000"))
+        self.z_plunge_speed_entry.set_text(c.get("z_plunge_speed", "20"))
+        self.z_raise_speed_entry.set_text(c.get("z_raise_speed", "20"))
         self.cutting_speed_entry.set_text(c.get("cutting_speed", "1500"))
         self.scoring_speed_entry.set_text(c.get("scoring_speed", "800"))
         # Machine Limits
@@ -1066,6 +1078,8 @@ class CNCDialog(Gtk.Dialog):
         config["tool_diameter"] = self.tool_diameter_entry.get_text()
         # Speeds (store as mm/s, no conversion)
         config["travel_speed"] = self.travel_speed_entry.get_text()
+        config["z_plunge_speed"] = self.z_plunge_speed_entry.get_text()
+        config["z_raise_speed"] = self.z_raise_speed_entry.get_text()
         config["cutting_speed"] = self.cutting_speed_entry.get_text()
         config["scoring_speed"] = self.scoring_speed_entry.get_text()
         # Machine Limits

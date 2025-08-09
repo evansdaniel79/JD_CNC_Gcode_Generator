@@ -66,9 +66,10 @@ class GCodeLogic:
             z_travel = self.config.get("z_stepper_travel_height", "5.0")
             speed = to_mm_min(self.config["scoring_speed"] if process_type == "scoring" else self.config["cutting_speed"])
             travel_speed = to_mm_min(self.config["travel_speed"])
+            z_plunge_speed = to_mm_min(self.config.get("z_plunge_speed", 20))
+            z_raise_speed = to_mm_min(self.config.get("z_raise_speed", 20))
             last_point = None
             head_is_up = True
-            
             for path in paths:
                 for sub in path:
                     if not sub:
@@ -80,10 +81,10 @@ class GCodeLogic:
                         stats["time"] += dist / travel_speed if travel_speed else 0
                     # Only lift if not already up
                     if not head_is_up:
-                        gcode.append(f"G0 Z{z_travel}")
+                        gcode.append(f"G0 F{z_raise_speed} Z{z_travel}")
                         head_is_up = True
                     gcode.append(f"G0 F{travel_speed} X{start_point[0]:.3f} Y{start_point[1]:.3f}")
-                    gcode.append(f"G1 Z{z_height}")
+                    gcode.append(f"G1 F{z_plunge_speed} Z{z_height}")
                     head_is_up = False
                     stats["tool_changes"] += 1
                     last = start_point
@@ -94,7 +95,7 @@ class GCodeLogic:
                         stats["time"] += dist / speed if speed else 0
                         gcode.append(f"G1 F{speed} X{p[0]:.3f} Y{p[1]:.3f}")
                         last = p
-                    gcode.append(f"G0 Z{z_travel}")
+                    gcode.append(f"G0 F{z_raise_speed} Z{z_travel}")
                     head_is_up = True
                     last_point = sub[-1]
             return gcode, stats
