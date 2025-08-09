@@ -14,7 +14,7 @@
         "cutting_speed": "35",
         "scoring_speed": "40",
         "max_velocity_xy": "200",
-        "max_velocity_z": "300.0",
+        "max_velocity_z": "50",
         "max_acceleration": "2000",
         "jerk": "10",
         "speed_override": "100",

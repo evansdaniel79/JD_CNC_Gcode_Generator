@@ -468,6 +468,12 @@ class CNCDialog(Gtk.Dialog):
         speeds_label.set_markup('<b>Speeds</b>')
         speeds_label.set_halign(Gtk.Align.START)
         grid.attach(speeds_label, 0, 0, 3, 1) # changed parameter 3 from row to 0
+        # Speed Override
+        grid.attach(Gtk.Label(label="Speed Override"), 0, row, 1, 1)
+        self.speed_override_entry = Gtk.Entry()
+        grid.attach(self.speed_override_entry, 1, row, 1, 1)
+        grid.attach(Gtk.Label(label="%"), 2, row, 1, 1)
+        row += 1
         # Speeds (all in mm/s)
         grid.attach(Gtk.Label(label="Travel Speed (Cutter Up)"), 0, row, 1, 1)
         self.travel_speed_entry = Gtk.Entry()
@@ -514,12 +520,6 @@ class CNCDialog(Gtk.Dialog):
         self.jerk_entry = Gtk.Entry()
         grid.attach(self.jerk_entry, 1, row, 1, 1)
         grid.attach(Gtk.Label(label="mm/s³"), 2, row, 1, 1)
-        row += 1
-        # Speed Override
-        grid.attach(Gtk.Label(label="Speed Override"), 0, row, 1, 1)
-        self.speed_override_entry = Gtk.Entry()
-        grid.attach(self.speed_override_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="%"), 2, row, 1, 1)
         row += 1
         # Safety Margin
         grid.attach(Gtk.Label(label="Safety Margin"), 0, row, 1, 1)
