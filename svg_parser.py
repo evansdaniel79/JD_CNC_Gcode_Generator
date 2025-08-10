@@ -7,31 +7,81 @@ class SVGParser:
         self.scale = self.svg.unittouu('1mm')  # Conversion factor to mm
 
     def get_paths_by_color(self):
-        black_paths = []
-        red_paths = []
+        all_black_subpaths = []
+        all_red_subpaths = []
+
+        def smart_stitch_subpaths(subpaths, tolerance=0.3):
+            """
+            Greedily chains subpaths by nearest endpoint, optionally reversing as needed.
+            Only connects subpaths if the endpoints are within the given tolerance.
+            """
+            if not subpaths:
+                return []
+            unused = subpaths[:]
+            stitched = []
+            # Start with the longest subpath (to avoid tiny fragments)
+            unused.sort(key=lambda s: -len(s))
+            while unused:
+                current = unused.pop(0)
+                stitched_path = list(current)
+                while unused:
+                    last_pt = stitched_path[-1]
+                    # Find the closest subpath (start or end) to last_pt
+                    best_idx = None
+                    best_dist = None
+                    best_reverse = False
+                    for idx, sub in enumerate(unused):
+                        d_start = math.hypot(sub[0][0] - last_pt[0], sub[0][1] - last_pt[1])
+                        d_end = math.hypot(sub[-1][0] - last_pt[0], sub[-1][1] - last_pt[1])
+                        if (best_dist is None or d_start < best_dist):
+                            best_dist = d_start
+                            best_idx = idx
+                            best_reverse = False
+                        if d_end < best_dist:
+                            best_dist = d_end
+                            best_idx = idx
+                            best_reverse = True
+                    # Only connect if within tolerance
+                    if best_dist is not None and best_dist < tolerance:
+                        next_sub = unused.pop(best_idx)
+                        if best_reverse:
+                            next_sub = list(reversed(next_sub))
+                        # Avoid duplicate point if already at the same spot
+                        if math.hypot(next_sub[0][0] - stitched_path[-1][0], next_sub[0][1] - stitched_path[-1][1]) < 1e-6:
+                            stitched_path.extend(next_sub[1:])
+                        else:
+                            stitched_path.extend(next_sub)
+                    else:
+                        break  # No more close subpaths, finish this chain
+                stitched.append(stitched_path)
+            return stitched
 
         for element in self.svg.selection.get():
             if isinstance(element, inkex.PathElement):
                 style = inkex.Style.parse_str(element.get('style'))
                 stroke_color = style.get('stroke', '#000000')
-                
                 if not stroke_color or stroke_color == 'none':
                     continue
-
                 color = tuple(inkex.Color(stroke_color))
-
                 # Check for black
                 if all(c < 20 for c in color):
                     path_data = self._extract_path_data(element)
                     if path_data:
-                        black_paths.append(path_data)
+                        all_black_subpaths.extend(path_data)
                 # Check for red
                 elif color[0] > 200 and color[1] < 50 and color[2] < 50:
                     path_data = self._extract_path_data(element)
                     if path_data:
-                        red_paths.append(path_data)
+                        all_red_subpaths.extend(path_data)
 
-        return black_paths, red_paths
+        # Sort subpaths for deterministic stitching (optional, but helps)
+        all_black_subpaths = sorted(all_black_subpaths, key=lambda sub: (sub[0][0], sub[0][1]) if sub else (0,0))
+        all_red_subpaths = sorted(all_red_subpaths, key=lambda sub: (sub[0][0], sub[0][1]) if sub else (0,0))
+
+        stitched_black = smart_stitch_subpaths(all_black_subpaths, tolerance=0.3)
+        stitched_red = smart_stitch_subpaths(all_red_subpaths, tolerance=0.3)
+
+        return [stitched_black], [stitched_red]
 
     def _flatten_cubic_bezier(self, p0, p1, p2, p3, flatness=0.1):  # Reduced flatness for more points
         # Recursively subdivide cubic Bezier until flat

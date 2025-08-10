@@ -19,6 +19,13 @@ import logging
 SCRIPT_VERSION = "1.0.9" # Incremented version for zoom and pan with middle click
 
 class CNCDialog(Gtk.Dialog):
+    def _initial_setup(self):
+        """
+        Performs initial auto-centering and G-code generation on startup.
+        """
+        self.log_message(f"JD CNC G-code Generator v{SCRIPT_VERSION} loaded.", "info")
+        self._auto_center_paths() # First, center the paths
+        self._generate_gcode_from_current_paths() # Then, generate G-code from the centered paths
     """Main CNC Cutter Control Dialog class."""
 
     def __init__(self, effect):
@@ -747,14 +754,6 @@ class CNCDialog(Gtk.Dialog):
 
     def on_auto_center_clicked(self, widget):
         """Handler for the 'Auto Center' button."""
-        self._auto_center_paths()
-
-    def _initial_setup(self):
-        """Performs initial auto-centering and G-code generation on startup."""
-        self.log_message(f"JD CNC G-code Generator v{SCRIPT_VERSION} loaded.", "info")
-        self._auto_center_paths() # First, center the paths
-        self._generate_gcode_from_current_paths() # Then, generate G-code from the centered paths
-
     def _auto_center_paths(self):
         """
         Centers the currently selected SVG paths on the bed and updates the preview.
@@ -764,6 +763,10 @@ class CNCDialog(Gtk.Dialog):
         try:
             current_config = self.get_config_from_ui()
             cut_paths, score_paths = self.svg_parser.get_paths_by_color() 
+
+            # Debug: log number of original SVG paths detected
+            num_cut_svg = len(cut_paths) if cut_paths else 0
+            num_score_svg = len(score_paths) if score_paths else 0
 
             if not cut_paths and not score_paths:
                 msg = "No selectable objects found in SVG to center."
@@ -777,10 +780,24 @@ class CNCDialog(Gtk.Dialog):
             # Perform centering
             centered_cut_paths, centered_score_paths = self.center_paths_on_bed(cut_paths, score_paths, bed_w, bed_h, margin)
 
+            # Debug: log number of stitched subpaths (after centering)
+            num_cut_stitched = sum(len(path) for path in centered_cut_paths) if centered_cut_paths else 0
+            num_score_stitched = sum(len(path) for path in centered_score_paths) if centered_score_paths else 0
+            logging.info(f"SVG cut paths: {num_cut_svg}, stitched cut subpaths: {num_cut_stitched}")
+            logging.info(f"SVG score paths: {num_score_svg}, stitched score subpaths: {num_score_stitched}")
+
             # Update internal state with centered paths
             self.generated_cut_paths = centered_cut_paths
             self.generated_score_paths = centered_score_paths
             self.gcode_generated = True # Mark that paths are ready for G-code generation
+
+            GLib.idle_add(self.gcode_preview.queue_draw) # Redraw preview with centered paths
+            logging.info("Objects centered.")
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            logging.error(f"Error during auto-centering: {e}") # Log as error
+            logging.error(tb) # Log traceback
 
             GLib.idle_add(self.gcode_preview.queue_draw) # Redraw preview with centered paths
             logging.info("Objects centered.")
