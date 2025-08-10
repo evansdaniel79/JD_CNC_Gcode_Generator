@@ -96,6 +96,7 @@ class CNCDialog(Gtk.Dialog):
 
         # Preview state for zoom and pan
         self.gcode_preview_zoom = 1.0 # Initial zoom level
+        self.GCODE_PREVIEW_MIN_ZOOM = 1.0  # Minimum allowed zoom (regular size)
         self.gcode_preview_offset = [0, 0] # Initial pan offset
         self.gcode_preview_drag = False # For view panning (middle click)
         self.gcode_preview_last = (0, 0) # For view panning
@@ -754,6 +755,27 @@ class CNCDialog(Gtk.Dialog):
 
     def on_auto_center_clicked(self, widget):
         """Handler for the 'Auto Center' button."""
+        # Always re-center the objects on the bed, not just reset the view
+        try:
+            current_config = self.get_config_from_ui()
+            cut_paths, score_paths = self.svg_parser.get_paths_by_color()
+            bed_w = float(current_config.get("bed_width", 300))
+            bed_h = float(current_config.get("bed_height", 200))
+            margin = float(current_config.get("safety_margin", 5))
+            centered_cut_paths, centered_score_paths = self.center_paths_on_bed(cut_paths, score_paths, bed_w, bed_h, margin)
+            self.generated_cut_paths = centered_cut_paths
+            self.generated_score_paths = centered_score_paths
+            self.gcode_generated = True
+            self.gcode_preview_zoom = 1.0
+            self.gcode_preview_offset = [0, 0]
+            GLib.idle_add(self.gcode_preview.queue_draw)
+            logging.info("Objects centered on bed.")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            logging.error(f"Error during auto-centering: {e}")
+            logging.error(tb)
+            GLib.idle_add(self.gcode_preview.queue_draw)
     def _auto_center_paths(self):
         """
         Centers the currently selected SVG paths on the bed and updates the preview.
@@ -790,6 +812,10 @@ class CNCDialog(Gtk.Dialog):
             self.generated_cut_paths = centered_cut_paths
             self.generated_score_paths = centered_score_paths
             self.gcode_generated = True # Mark that paths are ready for G-code generation
+
+            # Reset pan and zoom so the preview is centered and fits the bed
+            self.gcode_preview_zoom = 1.0
+            self.gcode_preview_offset = [0, 0]
 
             GLib.idle_add(self.gcode_preview.queue_draw) # Redraw preview with centered paths
             logging.info("Objects centered.")
@@ -1176,8 +1202,8 @@ class CNCDialog(Gtk.Dialog):
 
         # Apply new zoom
         new_zoom = self.gcode_preview_zoom * factor
-        # Limit zoom to a reasonable range
-        self.gcode_preview_zoom = max(0.1, min(new_zoom, 10.0)) # Min 0.1x, Max 10x
+        # Limit zoom to a reasonable range (min 1.0x, max 10x)
+        self.gcode_preview_zoom = max(self.GCODE_PREVIEW_MIN_ZOOM, min(new_zoom, 10.0))
 
         # Recalculate new screen position of the point that was under the mouse
         new_screen_x_relative_to_bed_top_left = bed_x_at_mouse * (scale_base * self.gcode_preview_zoom)
@@ -1274,6 +1300,35 @@ class CNCDialog(Gtk.Dialog):
             self.gcode_preview_offset[0] += dx
             self.gcode_preview_offset[1] += dy
             self.gcode_preview_last = (event.x, event.y)
+
+
+            # Clamp pan so you can't pan the bed out of view at any zoom (pixel-perfect)
+            w = widget.get_allocated_width()
+            h = widget.get_allocated_height()
+            config = self.get_config_from_ui()
+            bed_w = float(config.get("bed_width", 300))
+            bed_h = float(config.get("bed_height", 200))
+            scale_base = min(w / bed_w, h / bed_h) * 0.9
+            offset_x_base = (w - bed_w * scale_base) / 2
+            offset_y_base = (h - bed_h * scale_base) / 2
+            current_scale = scale_base * self.gcode_preview_zoom
+            bed_px = bed_w * current_scale
+            bed_py = bed_h * current_scale
+            # Clamp so the bed is always at least partially visible
+            if bed_px <= w:
+                # Bed smaller than viewport: center and lock pan
+                self.gcode_preview_offset[0] = 0
+            else:
+                min_offset_x = -(bed_px - w) / 2
+                max_offset_x = (bed_px - w) / 2
+                self.gcode_preview_offset[0] = min(max(self.gcode_preview_offset[0], min_offset_x), max_offset_x)
+            if bed_py <= h:
+                self.gcode_preview_offset[1] = 0
+            else:
+                min_offset_y = -(bed_py - h) / 2
+                max_offset_y = (bed_py - h) / 2
+                self.gcode_preview_offset[1] = min(max(self.gcode_preview_offset[1], min_offset_y), max_offset_y)
+
             self.gcode_preview.queue_draw()
         elif self.is_object_dragging: # Object dragging (left click)
             if self.generated_cut_paths or self.generated_score_paths:
@@ -1407,56 +1462,62 @@ class CNCDialog(Gtk.Dialog):
         scale = min(w / bed_w, h / bed_h) * 0.9
         offset_x = (w - bed_w * scale) / 2
         offset_y = (h - bed_h * scale) / 2
+
+        # Apply view panning offset and zoom to the entire scene (camera transform)
+        cr.save()
+        cr.translate(offset_x + self.gcode_preview_offset[0], offset_y + self.gcode_preview_offset[1])
+        cr.scale(scale * self.gcode_preview_zoom, scale * self.gcode_preview_zoom)
+
         # Draw white bed rectangle
         cr.set_source_rgb(1, 1, 1)
-        cr.rectangle(offset_x, offset_y, bed_w * scale, bed_h * scale)
+        cr.rectangle(0, 0, bed_w, bed_h)
         cr.fill_preserve()
         cr.set_source_rgb(0.2, 0.2, 0.2)
-        cr.set_line_width(2)
+        cr.set_line_width(2 / (scale * self.gcode_preview_zoom))
         cr.stroke()
         # Draw grid lines (#676767ff)
         cr.set_source_rgba(0.403, 0.403, 0.403, 1.0)
-        cr.set_line_width(1)
+        cr.set_line_width(1 / (scale * self.gcode_preview_zoom))
         step = 50
         for x in range(step, int(bed_w), step):
-            cr.move_to(offset_x + x * scale, offset_y)
-            cr.line_to(offset_x + x * scale, offset_y + bed_h * scale)
+            cr.move_to(x, 0)
+            cr.line_to(x, bed_h)
         for y in range(step, int(bed_h), step):
-            cr.move_to(offset_x, offset_y + y * scale)
-            cr.line_to(offset_x + bed_w * scale, offset_y + y * scale)
+            cr.move_to(0, y)
+            cr.line_to(bed_w, y)
         cr.stroke()
         # Draw origin marker (blue) and red/green arrows
         origin = config.get("origin_point", "front_left")
         if origin == "front_left":
-            ox, oy = offset_x, offset_y + bed_h * scale
+            ox, oy = 0, bed_h
             x_dir, y_dir = 1, -1
         elif origin == "front_right":
-            ox, oy = offset_x + bed_w * scale, offset_y + bed_h * scale
+            ox, oy = bed_w, bed_h
             x_dir, y_dir = -1, -1
         elif origin == "center":
-            ox, oy = offset_x + (bed_w * scale) / 2, offset_y + (bed_h * scale) / 2
+            ox, oy = bed_w / 2, bed_h / 2
             x_dir, y_dir = 1, -1
         elif origin == "back_left":
-            ox, oy = offset_x, offset_y
+            ox, oy = 0, 0
             x_dir, y_dir = 1, 1
         elif origin == "back_right":
-            ox, oy = offset_x + bed_w * scale, offset_y
+            ox, oy = bed_w, 0
             x_dir, y_dir = -1, 1
         else:
-            ox, oy = offset_x, offset_y + bed_h * scale
+            ox, oy = 0, bed_h
             x_dir, y_dir = 1, -1
         # Draw origin circle
         cr.set_source_rgb(0.1, 0.4, 1.0)
         cr.arc(ox, oy, 10, 0, 2 * 3.1416)
         cr.fill_preserve()
         cr.set_source_rgb(0, 0, 0)
-        cr.set_line_width(1)
+        cr.set_line_width(1 / (scale * self.gcode_preview_zoom))
         cr.stroke()
         # Draw X (red) and Y (green) arrows (match bed tab)
         arrow_len = 40
         # X arrow (red)
         cr.set_source_rgb(1, 0, 0)
-        cr.set_line_width(3)
+        cr.set_line_width(3 / (scale * self.gcode_preview_zoom))
         cr.move_to(ox, oy)
         cr.line_to(ox + arrow_len * x_dir, oy)
         cr.stroke()
@@ -1467,7 +1528,7 @@ class CNCDialog(Gtk.Dialog):
         cr.stroke()
         # Y arrow (green)
         cr.set_source_rgb(0, 0.7, 0)
-        cr.set_line_width(3)
+        cr.set_line_width(3 / (scale * self.gcode_preview_zoom))
         cr.move_to(ox, oy)
         cr.line_to(ox, oy + arrow_len * y_dir)
         cr.stroke()
@@ -1476,17 +1537,12 @@ class CNCDialog(Gtk.Dialog):
         cr.move_to(ox, oy + arrow_len * y_dir)
         cr.line_to(ox + 7, oy + (arrow_len - 10) * y_dir)
         cr.stroke()
-        # Draw G-code toolpaths
-        cr.save()
-        # Apply view panning offset and zoom
-        cr.translate(offset_x + self.gcode_preview_offset[0], offset_y + self.gcode_preview_offset[1])
-        cr.scale(scale * self.gcode_preview_zoom, scale * self.gcode_preview_zoom)
-        
+
         # Only draw toolpaths if G-code has been generated
         if not self.gcode_generated or self.generated_cut_paths is None:
             cr.restore()
             return
-        
+
         def draw_paths(paths, color):
             cr.set_source_rgb(*color)
             cr.set_line_width(1.5 / (scale * self.gcode_preview_zoom)) # Adjust line width for zoom
