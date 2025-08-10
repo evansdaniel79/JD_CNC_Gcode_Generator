@@ -944,13 +944,14 @@ class CNCDialog(Gtk.Dialog):
         dialog.set_current_folder(last_export.get('dir', os.path.expanduser('~')))
         dialog.set_do_overwrite_confirmation(True)
         response = dialog.run()
-        dialog.destroy() # Destroy the dialog immediately after getting the response
         if response == Gtk.ResponseType.OK:
             filename = dialog.get_filename()
-            self.config_manager.save_last_export_info(os.path.dirname(filename), os.path.basename(filename))
-            with open(filename, 'w') as f:
-                f.write(gcode)
-            self.log_message(f"G-code exported to {filename}")
+            if filename:
+                self.config_manager.save_last_export_info(os.path.dirname(filename), os.path.basename(filename))
+                with open(filename, 'w') as f:
+                    f.write(gcode)
+                self.log_message(f"G-code exported to {filename}")
+        dialog.destroy() # Destroy the dialog after all dialog methods
         
 
     def save_last_export_info(self):
