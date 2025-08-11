@@ -1214,6 +1214,22 @@ class CNCDialog(Gtk.Dialog):
         self.gcode_preview_offset[0] += (screen_x_relative_to_bed_top_left - new_screen_x_relative_to_bed_top_left)
         self.gcode_preview_offset[1] += (screen_y_relative_to_bed_top_left - new_screen_y_relative_to_bed_top_left)
 
+        # Clamp pan so the bed's edge never leaves the viewport (same as in on_gcode_preview_motion)
+        bed_px = bed_w * scale_base * self.gcode_preview_zoom
+        bed_py = bed_h * scale_base * self.gcode_preview_zoom
+        if bed_px <= w:
+            self.gcode_preview_offset[0] = 0
+        else:
+            min_offset_x = w - (offset_x_base + bed_px)
+            max_offset_x = -offset_x_base
+            self.gcode_preview_offset[0] = min(max(self.gcode_preview_offset[0], min_offset_x), max_offset_x)
+        if bed_py <= h:
+            self.gcode_preview_offset[1] = 0
+        else:
+            min_offset_y = h - (offset_y_base + bed_py)
+            max_offset_y = -offset_y_base
+            self.gcode_preview_offset[1] = min(max(self.gcode_preview_offset[1], min_offset_y), max_offset_y)
+
         self.gcode_preview.queue_draw()
         return True
 
@@ -1303,7 +1319,7 @@ class CNCDialog(Gtk.Dialog):
             self.gcode_preview_last = (event.x, event.y)
 
 
-            # Clamp pan so you can't pan the bed out of view at any zoom (pixel-perfect)
+            # Inkscape-style: allow panning so any part of the bed can be centered, but never pan beyond the bed's edge
             w = widget.get_allocated_width()
             h = widget.get_allocated_height()
             config = self.get_config_from_ui()
@@ -1315,19 +1331,21 @@ class CNCDialog(Gtk.Dialog):
             current_scale = scale_base * self.gcode_preview_zoom
             bed_px = bed_w * current_scale
             bed_py = bed_h * current_scale
-            # Clamp so the bed is always at least partially visible
+
+            # The offset is applied to the scene after centering the bed in the viewport
+            # We want to clamp so the bed's edge never leaves the viewport
             if bed_px <= w:
                 # Bed smaller than viewport: center and lock pan
                 self.gcode_preview_offset[0] = 0
             else:
-                min_offset_x = -(bed_px - w) / 2
-                max_offset_x = (bed_px - w) / 2
+                min_offset_x = w - (offset_x_base + bed_px)
+                max_offset_x = -offset_x_base
                 self.gcode_preview_offset[0] = min(max(self.gcode_preview_offset[0], min_offset_x), max_offset_x)
             if bed_py <= h:
                 self.gcode_preview_offset[1] = 0
             else:
-                min_offset_y = -(bed_py - h) / 2
-                max_offset_y = (bed_py - h) / 2
+                min_offset_y = h - (offset_y_base + bed_py)
+                max_offset_y = -offset_y_base
                 self.gcode_preview_offset[1] = min(max(self.gcode_preview_offset[1], min_offset_y), max_offset_y)
 
             self.gcode_preview.queue_draw()
