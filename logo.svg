@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="1000"
+   height="611.23657"
+   viewBox="0 0 1000 611.23657"
+   version="1.1"
+   id="svg1"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <pattern
+       xlink:href="#Strips1_1"
+       preserveAspectRatio="xMidYMid"
+       id="pattern27"
+       patternTransform="matrix(28.00143,28.001428,-28.001428,28.00143,-35.284783,-139.83053)"
+       x="0"
+       y="0" />
+    <pattern
+       patternUnits="userSpaceOnUse"
+       width="2"
+       height="10"
+       patternTransform="translate(0,0) scale(2,2)"
+       preserveAspectRatio="xMidYMid"
+       id="Strips1_1"
+       style="fill:#434343">
+      <rect
+         style="stroke:none"
+         x="0"
+         y="-0.5"
+         width="1"
+         height="11"
+         id="rect134" />
+    </pattern>
+    <linearGradient
+       id="swatch22">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop22" />
+    </linearGradient>
+  </defs>
+  <g
+     id="layer1"
+     transform="translate(-9.1454895e-6,-194.38173)">
+    <text
+       xml:space="preserve"
+       style="font-weight:bold;font-size:882.106px;font-family:Roboto;-inkscape-font-specification:'Roboto Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:url(#pattern27);fill-opacity:1;stroke:none;stroke-width:93.7671;stroke-opacity:1;paint-order:stroke fill markers"
+       x="-74.978195"
+       y="832.91974"
+       id="text1"
+       transform="scale(1.0448364,0.95708764)"><tspan
+         id="tspan1"
+         x="-74.978195"
+         y="832.91974"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Noto Sans Mono';-inkscape-font-specification:'Noto Sans Mono Bold';fill:url(#pattern27);fill-opacity:1;stroke:none;stroke-width:93.7671;stroke-opacity:1">JD</tspan></text>
+  </g>
+</svg>
