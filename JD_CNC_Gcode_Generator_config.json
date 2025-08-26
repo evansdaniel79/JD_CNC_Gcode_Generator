@@ -1,8 +1,8 @@
 {
     "last": {
-        "bed_width": "750",
-        "bed_height": "508",
-        "origin_point": "back_left",
+        "bed_width": "755",
+        "bed_height": "494",
+        "origin_point": "front_left",
         "servo_delay": "",
         "servo_score": "60",
         "servo_cut": "170",
@@ -21,12 +21,12 @@
         "jerk": "10",
         "speed_override": "100",
         "safety_margin": "5",
-        "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes",
+        "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\n",
         "end_gcode": "; End G-code\nG28\nM2 ; Program end",
         "z_mode": "stepper",
-        "z_stepper_cut_height": "26",
-        "z_stepper_travel_height": "17",
-        "z_stepper_score_height": "24",
+        "z_stepper_cut_height": "3.8",
+        "z_stepper_travel_height": "15",
+        "z_stepper_score_height": "7",
         "spindle_speed": "10000",
         "units": 0,
         "plunge_speed": "500",
@@ -36,7 +36,7 @@
     "default": {
         "bed_width": "750",
         "bed_height": "508",
-        "origin_point": "back_left",
+        "origin_point": "front_left",
         "servo_delay": "",
         "servo_score": "60",
         "servo_cut": "170",
@@ -55,12 +55,12 @@
         "jerk": "10",
         "speed_override": "100",
         "safety_margin": "5",
-        "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes",
+        "start_gcode": "; Start G-code\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\nM420 S1 ; Enable bed leveling",
         "end_gcode": "; End G-code\nG28\nM2 ; Program end",
         "z_mode": "stepper",
-        "z_stepper_cut_height": "26",
-        "z_stepper_travel_height": "17",
-        "z_stepper_score_height": "24",
+        "z_stepper_cut_height": "28.5",
+        "z_stepper_travel_height": "18",
+        "z_stepper_score_height": "25.5",
         "spindle_speed": "10000",
         "units": 0,
         "plunge_speed": "500",
@@ -69,6 +69,6 @@
     },
     "last_export": {
         "dir": "/run/media/daniel/EFE8-F197",
-        "filename": "simple_scout_fuselauge_atempt2.gcode"
+        "filename": "simple_scout_new_rutter.gcode"
     }
 }
