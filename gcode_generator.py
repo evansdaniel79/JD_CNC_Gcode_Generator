@@ -14,14 +14,27 @@ from gcode_logic import GCodeLogic
 import threading
 import os
 import logging
+import traceback
 
 # Define a script version for easier debugging
 SCRIPT_VERSION = "1.0.9" # Incremented version for zoom and pan with middle click
 
 class CNCDialog(Gtk.Dialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, effect=None):
+        # parent is a Gtk.Window (or None). effect is the inkex.Effect instance (optional)
         super().__init__(title="JD CNC G-code Generator", transient_for=parent, modal=True, destroy_with_parent=True)
-        # The rest of the initialization is already present below (UI setup, etc.)
+        # store reference to the calling Effect so we can access self.svg
+        self.effect = effect
+        # core helpers
+        self.config_manager = ConfigManager()
+        self.gcode_logic = GCodeLogic()
+        # SVGParser needs an SVG document; only create if effect provided
+        try:
+            self.svg_parser = SVGParser(effect.svg) if effect is not None else None
+        except Exception:
+            self.svg_parser = None
+        # Build the UI
+        self.build_ui()
 
     def check_and_notify_out_of_bounds(self):
         """
@@ -55,45 +68,13 @@ class CNCDialog(Gtk.Dialog):
                 GLib.idle_add(self.fade_out_error_notification)
             self._prev_out_of_bounds = False
 
-    def _generate_gcode_from_current_paths(self):
-        """
-        Generates G-code from the current internal paths (self.generated_cut_paths, self.generated_score_paths).
-        Triggers progress indicator.
-        """
-        self.start_progress() # Show progress indicator
-
-        def generate_gcode_bg():
-            try:
-                if not self.generated_cut_paths and not self.generated_score_paths:
-                    GLib.idle_add(self.stop_progress)
-                    msg = "No paths available to generate G-code. Please select objects and/or auto-center first."
-                    logging.warning(msg)
-                    return
-                # Check out-of-bounds and notify
-                GLib.idle_add(self.check_and_notify_out_of_bounds)
-                current_config = self.get_config_from_ui()
-                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
-                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
-                GLib.idle_add(self.stop_progress)
-                # Only log success if not out of bounds
-                if not getattr(self, '_prev_out_of_bounds', False):
-                    logging.info("G-code generated.")
-            except Exception as e:
-                GLib.idle_add(self.stop_progress)
-                import traceback
-                tb = traceback.format_exc()
-                logging.error(f"Error during G-code generation: {e}")
-                logging.error(tb)
-        import threading
-        threading.Thread(target=generate_gcode_bg, daemon=True).start()
-    def on_gcode_preview_motion(self, widget, event):
-        # ...existing code for dragging logic...
-        # After updating object position, check for out-of-bounds and notify
-        self.check_and_notify_out_of_bounds()
-        # ...existing code for redrawing preview, etc...
+    
+    def build_ui(self):
+        """Create and wire up the full dialog UI. Called from __init__."""
+        # Load configs
         self.config = self.config_manager.load_config()
         self.default_config = self.config_manager.load_default()
-        
+
         self.set_default_size(1200, 800)
         self.set_resizable(True)
         self.set_position(Gtk.WindowPosition.CENTER)
@@ -116,9 +97,13 @@ class CNCDialog(Gtk.Dialog):
         main_box.pack_start(overlay, True, True, 0)
         self.get_content_area().add(main_box)
 
-        # Create and add all the tabs from your outline
+        # Create and add all the tabs
         self.create_home_tab()
-        self.create_bed_config_tab()
+        # create_bed_config_tab might reference widgets declared here; keep order
+        try:
+            self.create_bed_config_tab()
+        except Exception:
+            pass
         self.create_tool_options_tab()
         self.create_speeds_and_limits_tab()
         self.create_gcode_templates_tab()
@@ -158,6 +143,31 @@ class CNCDialog(Gtk.Dialog):
 
         # Initial setup: auto-center and then generate G-code
         GLib.idle_add(self._initial_setup)
+
+    def _initial_setup(self):
+        """Perform quick initial actions after the UI is shown: auto-center selection and generate preview if possible."""
+        try:
+            # If SVG parser available and selection exists, attempt to center
+            if hasattr(self, 'svg_parser') and self.svg_parser is not None:
+                try:
+                    cut_paths, score_paths = self.svg_parser.get_paths_by_color()
+                    if cut_paths or score_paths:
+                        bed_w = float(self.config.get("bed_width", 300))
+                        bed_h = float(self.config.get("bed_height", 200))
+                        margin = float(self.config.get("safety_margin", 5))
+                        centered_cut, centered_score = self.center_paths_on_bed(cut_paths, score_paths, bed_w, bed_h, margin)
+                        self.generated_cut_paths = centered_cut
+                        self.generated_score_paths = centered_score
+                        self.gcode_generated = True
+                except Exception:
+                    # Ignore parser errors during initial setup
+                    pass
+            # Trigger a preview redraw
+            if hasattr(self, 'gcode_preview'):
+                self.gcode_preview.queue_draw()
+        except Exception:
+            pass
+        return False
 
 
     def _setup_logging(self):
@@ -223,6 +233,45 @@ class CNCDialog(Gtk.Dialog):
         grid = Gtk.Grid(row_spacing=8, column_spacing=10, margin=margin)
         frame.add(grid)
         return frame, grid
+
+
+    def create_bed_config_tab(self):
+        """Creates a simple Bed & Origin tab with bed size and origin selection."""
+        frame, grid = self.create_frame("")
+        row = 0
+        # Bed size
+        grid.attach(Gtk.Label(label="Bed Width"), 0, row, 1, 1)
+        self.bed_width_entry = Gtk.Entry()
+        grid.attach(self.bed_width_entry, 1, row, 1, 1)
+        grid.attach(Gtk.Label(label="mm"), 2, row, 1, 1)
+        row += 1
+        grid.attach(Gtk.Label(label="Bed Height"), 0, row, 1, 1)
+        self.bed_height_entry = Gtk.Entry()
+        grid.attach(self.bed_height_entry, 1, row, 1, 1)
+        grid.attach(Gtk.Label(label="mm"), 2, row, 1, 1)
+        row += 1
+
+        # Origin selection (radio group)
+        origin_label = Gtk.Label()
+        origin_label.set_markup('<b>Origin</b>')
+        origin_label.set_halign(Gtk.Align.START)
+        grid.attach(origin_label, 0, row, 3, 1)
+        row += 1
+
+        self.origin_front_left = Gtk.RadioButton.new_with_label_from_widget(None, "Front Left")
+        grid.attach(self.origin_front_left, 0, row, 1, 1)
+        self.origin_front_right = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Front Right")
+        grid.attach(self.origin_front_right, 1, row, 1, 1)
+        self.origin_center = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Center")
+        grid.attach(self.origin_center, 2, row, 1, 1)
+        row += 1
+        self.origin_back_left = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Back Left")
+        grid.attach(self.origin_back_left, 0, row, 1, 1)
+        self.origin_back_right = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Back Right")
+        grid.attach(self.origin_back_right, 1, row, 1, 1)
+        row += 1
+
+        self.notebook.append_page(frame, Gtk.Label(label="Bed & Origin"))
 
 
     def _generate_gcode_from_current_paths(self):
@@ -294,94 +343,6 @@ class CNCDialog(Gtk.Dialog):
                 logging.error(tb) # Log traceback
 
         threading.Thread(target=generate_gcode_bg, daemon=True).start()
-        try:
-            bed_w = float(self.bed_width_entry.get_text())
-        except ValueError:
-            bed_w = 300
-        try:
-            bed_h = float(self.bed_height_entry.get_text())
-        except ValueError:
-            bed_h = 200
-        # Calculate scale to fit preview area
-        scale = min(width / bed_w, height / bed_h) * 0.9
-        offset_x = (width - bed_w * scale) / 2
-        offset_y = (height - bed_h * scale) / 2
-        # Draw bed rectangle
-        cr.set_source_rgb(0.9, 0.9, 0.9)
-        cr.rectangle(offset_x, offset_y, bed_w * scale, bed_h * scale)
-        cr.fill_preserve()
-        cr.set_source_rgb(0.2, 0.2, 0.2)
-        cr.set_line_width(2)
-        cr.stroke()
-        cr.set_source_rgb(0.7, 0.7, 0.7)
-        cr.set_line_width(1)
-        step = 50
-        for x in range(step, int(bed_w), step):
-            cr.move_to(offset_x + x * scale, offset_y)
-            cr.line_to(offset_x + x * scale, offset_y + bed_h * scale)
-        for y in range(step, int(bed_h), step):
-            cr.move_to(offset_x, offset_y + y * scale)
-            cr.line_to(offset_x + bed_w * scale, offset_y + y * scale)
-        cr.stroke()
-        # Draw origin/cutter head marker (blue)
-        cr.set_source_rgb(0.1, 0.4, 1.0)
-        cr.set_line_width(3)
-        # Map UI to preview: front = bottom, back = top
-        if self.origin_front_left.get_active():
-            ox, oy = offset_x, offset_y + bed_h * scale
-            x_dir, y_dir = 1, -1
-        elif self.origin_front_right.get_active():
-            ox, oy = offset_x + bed_w * scale, offset_y + bed_h * scale
-            x_dir, y_dir = -1, -1
-        elif self.origin_center.get_active():
-            ox, oy = offset_x + (bed_w * scale) / 2, offset_y + (bed_h * scale) / 2
-            x_dir, y_dir = 1, -1
-        elif self.origin_back_left.get_active():
-            ox, oy = offset_x, offset_y
-            x_dir, y_dir = 1, 1
-        elif self.origin_back_right.get_active():
-            ox, oy = offset_x + bed_w * scale, offset_y
-            x_dir, y_dir = -1, 1
-        else:
-            ox, oy = offset_x, offset_y + bed_h * scale
-            x_dir, y_dir = 1, -1
-        # Draw cutter head circle (blue)
-        cr.arc(ox, oy, 8, 0, 2 * 3.1416)
-        cr.fill_preserve()
-        cr.set_source_rgb(0, 0, 0)
-        cr.set_line_width(1)
-        cr.stroke()
-        # Crosshairs
-        cr.set_source_rgb(0, 0, 0)
-        cr.move_to(ox - 12, oy)
-        cr.line_to(ox + 12, oy)
-        cr.move_to(ox, oy - 12)
-        cr.line_to(ox, oy + 12)
-        cr.stroke()
-        # Draw X (red) and Y (green) arrows responsively
-        arrow_len = 40
-        # X arrow (red)
-        cr.set_source_rgb(1, 0, 0)
-        cr.set_line_width(3)
-        cr.move_to(ox, oy)
-        cr.line_to(ox + arrow_len * x_dir, oy)
-        cr.stroke()
-        cr.move_to(ox + arrow_len * x_dir, oy)
-        cr.line_to(ox + (arrow_len - 10) * x_dir, oy - 7)
-        cr.move_to(ox + arrow_len * x_dir, oy)
-        cr.line_to(ox + (arrow_len - 10) * x_dir, oy + 7)
-        cr.stroke()
-        # Y arrow (green)
-        cr.set_source_rgb(0, 0.7, 0)
-        cr.set_line_width(3)
-        cr.move_to(ox, oy)
-        cr.line_to(ox, oy + arrow_len * y_dir)
-        cr.stroke()
-        cr.move_to(ox, oy + arrow_len * y_dir)
-        cr.line_to(ox - 7, oy + (arrow_len - 10) * y_dir)
-        cr.move_to(ox, oy + arrow_len * y_dir)
-        cr.line_to(ox + 7, oy + (arrow_len - 10) * y_dir)
-        cr.stroke()
 
     def create_tool_options_tab(self):
         """Creates a combined Tool Options tab with Z Axis, Spindle, and Tool Offset sections, using a single grid layout with section headers and unit labels."""
@@ -1707,7 +1668,8 @@ class JDCncGcodeGenerator(inkex.Effect):
             import logging
             logging.error("Please select objects before running the CNC G-code Generator.")
             return
-        dialog = CNCDialog(self)
+        # Pass the Effect instance so CNCDialog can access the current SVG document
+        dialog = CNCDialog(None, effect=self)
         dialog.run()
         # When the dialog closes (via destroy), Gtk.main_quit() is called,
         # and the script will exit gracefully.
