@@ -19,26 +19,78 @@ import logging
 SCRIPT_VERSION = "1.0.9" # Incremented version for zoom and pan with middle click
 
 class CNCDialog(Gtk.Dialog):
-    def _initial_setup(self):
-        """
-        Performs initial auto-centering and G-code generation on startup.
-        """
-        self.log_message(f"JD CNC G-code Generator v{SCRIPT_VERSION} loaded.", "info")
-        self._auto_center_paths() # First, center the paths
-        self._generate_gcode_from_current_paths() # Then, generate G-code from the centered paths
-    """Main CNC Cutter Control Dialog class."""
+    def __init__(self, parent=None):
+        super().__init__(title="JD CNC G-code Generator", transient_for=parent, modal=True, destroy_with_parent=True)
+        # The rest of the initialization is already present below (UI setup, etc.)
 
-    def __init__(self, effect):
-        # CORRECTED: Use modern keyword arguments instead of deprecated 'flags'
-        super().__init__(title="JD CNC G-code Generator", modal=True, destroy_with_parent=True)
-        self.effect = effect
-        
-        # Initialize backend components
-        self.config_manager = ConfigManager("JD_CNC_Gcode_Generator")
-        self.svg_parser = SVGParser(effect.svg)
-        self.gcode_logic = GCodeLogic()
-        
-        # Load last-used configuration
+    def check_and_notify_out_of_bounds(self):
+        """
+        Checks if any point in the generated paths is out of bounds and shows/hides the error notification accordingly.
+        Call this after any move/drag or G-code generation.
+        """
+        current_config = self.get_config_from_ui()
+        bed_w = float(current_config.get("bed_width", 300))
+        bed_h = float(current_config.get("bed_height", 200))
+        margin = float(current_config.get("safety_margin", 5))
+        all_points_for_check = []
+        for path_list in [self.generated_cut_paths, self.generated_score_paths]:
+            if path_list:
+                for path in path_list:
+                    for subpath in path:
+                        all_points_for_check.extend(subpath)
+        out_of_bounds = False
+        if all_points_for_check:
+            for x, y in all_points_for_check:
+                if not (margin <= x <= bed_w - margin and margin <= y <= bed_h - margin):
+                    out_of_bounds = True
+                    break
+        if not hasattr(self, '_prev_out_of_bounds'):
+            self._prev_out_of_bounds = False
+        if out_of_bounds:
+            msg = "Object detected outside of cutter area. Please adjust or re-center."
+            logging.error(msg)
+            self._prev_out_of_bounds = True
+        else:
+            if getattr(self, '_prev_out_of_bounds', False):
+                GLib.idle_add(self.fade_out_error_notification)
+            self._prev_out_of_bounds = False
+
+    def _generate_gcode_from_current_paths(self):
+        """
+        Generates G-code from the current internal paths (self.generated_cut_paths, self.generated_score_paths).
+        Triggers progress indicator.
+        """
+        self.start_progress() # Show progress indicator
+
+        def generate_gcode_bg():
+            try:
+                if not self.generated_cut_paths and not self.generated_score_paths:
+                    GLib.idle_add(self.stop_progress)
+                    msg = "No paths available to generate G-code. Please select objects and/or auto-center first."
+                    logging.warning(msg)
+                    return
+                # Check out-of-bounds and notify
+                GLib.idle_add(self.check_and_notify_out_of_bounds)
+                current_config = self.get_config_from_ui()
+                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.stop_progress)
+                # Only log success if not out of bounds
+                if not getattr(self, '_prev_out_of_bounds', False):
+                    logging.info("G-code generated.")
+            except Exception as e:
+                GLib.idle_add(self.stop_progress)
+                import traceback
+                tb = traceback.format_exc()
+                logging.error(f"Error during G-code generation: {e}")
+                logging.error(tb)
+        import threading
+        threading.Thread(target=generate_gcode_bg, daemon=True).start()
+    def on_gcode_preview_motion(self, widget, event):
+        # ...existing code for dragging logic...
+        # After updating object position, check for out-of-bounds and notify
+        self.check_and_notify_out_of_bounds()
+        # ...existing code for redrawing preview, etc...
         self.config = self.config_manager.load_config()
         self.default_config = self.config_manager.load_default()
         
@@ -110,8 +162,7 @@ class CNCDialog(Gtk.Dialog):
 
     def _setup_logging(self):
         """
-        Sets up the logging system to direct messages to the Gtk.TextView log panel.
-        Creates Gtk.TextTag objects for coloring messages.
+        Sets up the logging system to direct messages to the notification popup.
         """
         class GtkLogHandler(logging.Handler):
             def __init__(self, dialog):
@@ -129,7 +180,6 @@ class CNCDialog(Gtk.Dialog):
         # Clear existing handlers to prevent duplicate messages if run multiple times
         for handler in list(root_logger.handlers):
             root_logger.removeHandler(handler)
-        
         handler = GtkLogHandler(self)
         handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
         root_logger.addHandler(handler)
@@ -139,11 +189,6 @@ class CNCDialog(Gtk.Dialog):
         def warning_to_log(message, category, filename, lineno, file=None, line=None):
             logging.warning(f'{category.__name__}: {message} ({filename}:{lineno})')
         warnings.showwarning = warning_to_log
-
-        # Setup tags for colored messages and store them as attributes
-        # These tags are created directly on the buffer and then reused.
-        self.info_tag = self.log_buffer.create_tag("info", foreground="white") # White for info and warnings
-        self.error_tag = self.log_buffer.create_tag("error", foreground="#FF0000", weight=600) # Nice red and bold for errors
 
 
     def connect_auto_save(self):
@@ -179,77 +224,76 @@ class CNCDialog(Gtk.Dialog):
         frame.add(grid)
         return frame, grid
 
-    def create_bed_config_tab(self):
-        """Creates the Bed & Origin tab with a single grid and section headers, no extra frames."""
-        frame, grid = self.create_frame("")
-        row = 0
-        # Bed Size Section Header
-        bed_label = Gtk.Label()
-        bed_label.set_markup('<b>Bed Size</b>')
-        bed_label.set_halign(Gtk.Align.START)
-        grid.attach(bed_label, 0, row, 3, 1)
-        row += 1
-        grid.attach(Gtk.Label(label="Bed Width (X)"), 0, row, 1, 1)
-        self.bed_width_entry = Gtk.Entry()
-        self.bed_width_entry.set_width_chars(8)
-        grid.attach(self.bed_width_entry, 1, row, 1, 1)
-        mm_label1 = Gtk.Label(label="mm")
-        mm_label1.set_halign(Gtk.Align.START)
-        mm_label1.set_margin_start(4)
-        grid.attach(mm_label1, 2, row, 1, 1)
-        row += 1
-        grid.attach(Gtk.Label(label="Bed Height (Y)"), 0, row, 1, 1)
-        self.bed_height_entry = Gtk.Entry()
-        self.bed_height_entry.set_width_chars(8)
-        grid.attach(self.bed_height_entry, 1, row, 1, 1)
-        mm_label2 = Gtk.Label(label="mm")
-        mm_label2.set_halign(Gtk.Align.START)
-        mm_label2.set_margin_start(4)
-        grid.attach(mm_label2, 2, row, 1, 1)
-        row += 1
-        # Origin Section Header
-        origin_label = Gtk.Label()
-        origin_label.set_markup('<b>Origin Point</b>')
-        origin_label.set_halign(Gtk.Align.START)
-        grid.attach(origin_label, 0, row, 3, 1)
-        row += 1
-        # Origin radio buttons
-        self.origin_front_left = Gtk.RadioButton.new_with_label(None, "Front Left")
-        self.origin_front_right = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Front Right")
-        self.origin_center = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Center")
-        self.origin_back_left = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Back Left")
-        self.origin_back_right = Gtk.RadioButton.new_with_label_from_widget(self.origin_front_left, "Back Right")
-        grid.attach(self.origin_front_left, 0, row, 1, 1)
-        grid.attach(self.origin_front_right, 1, row, 1, 1)
-        row += 1
-        grid.attach(self.origin_center, 0, row, 1, 1)
-        grid.attach(self.origin_back_left, 1, row, 1, 1)
-        grid.attach(self.origin_back_right, 2, row, 1, 1)
-        row += 1
-        # Bed preview drawing area
-        self.bed_preview = Gtk.DrawingArea()
-        self.bed_preview.set_size_request(300, 200)
-        self.bed_preview.set_hexpand(True)
-        self.bed_preview.set_vexpand(True)
-        self.bed_preview.connect("draw", self.on_bed_preview_draw)
-        self.bed_width_entry.connect("changed", lambda w: self.bed_preview.queue_draw())
-        self.bed_height_entry.connect("changed", lambda w: self.bed_preview.queue_draw())
-        self.origin_front_left.connect("toggled", lambda w: self.bed_preview.queue_draw())
-        self.origin_front_right.connect("toggled", lambda w: self.bed_preview.queue_draw())
-        self.origin_center.connect("toggled", lambda w: self.bed_preview.queue_draw())
-        self.origin_back_left.connect("toggled", lambda w: self.bed_preview.queue_draw())
-        self.origin_back_right.connect("toggled", lambda w: self.bed_preview.queue_draw())
-        # Add grid and preview to a vbox
-        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        main_vbox.pack_start(frame, False, False, 0)
-        main_vbox.pack_start(self.bed_preview, True, True, 0)
-        self.notebook.append_page(main_vbox, Gtk.Label(label="Bed & Origin"))
 
-    def on_bed_preview_draw(self, widget, cr):
-        """Draws a fast, responsive 2D preview of the bed, origin, and cutter head with responsive X/Y arrows."""
-        width = widget.get_allocated_width()
-        height = widget.get_allocated_height()
-        # Get bed size from entries, fallback to defaults
+    def _generate_gcode_from_current_paths(self):
+        """
+        Generates G-code from the current internal paths (self.generated_cut_paths, self.generated_score_paths).
+        Triggers progress indicator.
+        """
+        self.start_progress() # Show progress indicator
+
+        def generate_gcode_bg():
+            try:
+                current_config = self.get_config_from_ui()
+
+                if not self.generated_cut_paths and not self.generated_score_paths:
+                    GLib.idle_add(self.stop_progress)
+                    msg = "No paths available to generate G-code. Please select objects and/or auto-center first."
+                    logging.warning(msg) # Log as warning, will be displayed as info
+                    return
+
+                bed_w = float(current_config.get("bed_width", 300))
+                bed_h = float(current_config.get("bed_height", 200))
+                margin = float(current_config.get("safety_margin", 5))
+
+                # Perform point-by-point out-of-bounds check (original behavior)
+                all_points_for_check = []
+                for path_list in [self.generated_cut_paths, self.generated_score_paths]:
+                    if path_list:
+                        for path in path_list:
+                            for subpath in path:
+                                all_points_for_check.extend(subpath)
+
+                out_of_bounds = False
+                if all_points_for_check:
+                    for x, y in all_points_for_check:
+                        if not (margin <= x <= bed_w - margin and margin <= y <= bed_h - margin):
+                            out_of_bounds = True
+                            break
+
+                # Track previous error state for fade-out
+                if not hasattr(self, '_prev_out_of_bounds'):
+                    self._prev_out_of_bounds = False
+
+                # Debug logging for state transitions
+                debug_msg = f"[DEBUG] out_of_bounds={out_of_bounds}, prev={self._prev_out_of_bounds}"
+                print(debug_msg)
+                logging.debug(debug_msg)
+
+                if out_of_bounds:
+                    msg = "Object detected outside of cutter area. Please adjust or re-center."
+                    logging.error(msg) # Log as error
+                    self._prev_out_of_bounds = True
+                else:
+                    # If previously out_of_bounds, fade out the error notification
+                    if getattr(self, '_prev_out_of_bounds', False):
+                        GLib.idle_add(self.fade_out_error_notification)
+                    self._prev_out_of_bounds = False
+
+                # Always generate G-code and update preview, even if out_of_bounds
+                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.stop_progress)
+                if not out_of_bounds:
+                    logging.info("G-code generated.")
+
+            except Exception as e:
+                GLib.idle_add(self.stop_progress)
+                tb = traceback.format_exc()
+                logging.error(f"Error during G-code generation: {e}") # Log as error
+                logging.error(tb) # Log traceback
+
+        threading.Thread(target=generate_gcode_bg, daemon=True).start()
         try:
             bed_w = float(self.bed_width_entry.get_text())
         except ValueError:
@@ -585,11 +629,8 @@ class CNCDialog(Gtk.Dialog):
         self.notebook.append_page(main_vbox, Gtk.Label(label="G-code Templates"))
 
     def create_home_tab(self):
-        """Creates the Home tab with a 2D G-code preview, generated G-code panel, and log panel."""
-        # Main vertical container
+        """Creates the Home tab with a 2D G-code preview and generated G-code panel. Log panel removed."""
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-
-        # Horizontal container for preview and right panel
         top_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         top_hbox.set_hexpand(True)
         top_hbox.set_vexpand(True)
@@ -601,18 +642,16 @@ class CNCDialog(Gtk.Dialog):
         preview_frame.set_vexpand(True)
 
         preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        
         self.gcode_preview = Gtk.DrawingArea()
         self.gcode_preview.set_size_request(500, 400)
         self.gcode_preview.set_hexpand(True)
         self.gcode_preview.set_vexpand(True)
         self.gcode_preview.connect("draw", self.on_gcode_preview_draw)
-        # The preview area should always be shown, even if empty
-        self.gcode_preview.show() 
+        self.gcode_preview.show()
         self.gcode_preview.add_events(
-            Gdk.EventMask.SCROLL_MASK | 
-            Gdk.EventMask.BUTTON_PRESS_MASK | 
-            Gdk.EventMask.BUTTON_RELEASE_MASK | 
+            Gdk.EventMask.SCROLL_MASK |
+            Gdk.EventMask.BUTTON_PRESS_MASK |
+            Gdk.EventMask.BUTTON_RELEASE_MASK |
             Gdk.EventMask.POINTER_MOTION_MASK
         )
         self.gcode_preview.connect("scroll-event", self.on_gcode_preview_scroll)
@@ -623,11 +662,9 @@ class CNCDialog(Gtk.Dialog):
         preview_frame.add(preview_box)
         top_hbox.pack_start(preview_frame, True, True, 0)
 
-        # --- Right panel: G-code and log ---
+        # --- Right panel: G-code only ---
         right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         right_vbox.set_hexpand(True)
-
-        # G-code panel
         gcode_frame = Gtk.Frame()
         gcode_frame.set_shadow_type(Gtk.ShadowType.IN)
         gcode_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -644,30 +681,16 @@ class CNCDialog(Gtk.Dialog):
         gcode_vbox.pack_start(gcode_scroll, True, True, 0)
         gcode_frame.add(gcode_vbox)
         right_vbox.pack_start(gcode_frame, True, True, 0)
-
-        # Log panel
-        log_frame = Gtk.Frame()
-        log_frame.set_shadow_type(Gtk.ShadowType.IN)
-        log_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.log_buffer = Gtk.TextBuffer()
-        self.log_view = Gtk.TextView(buffer=self.log_buffer)
-        self.log_view.set_editable(False)
-        self.log_view.set_cursor_visible(False)
-        self.log_view.set_monospace(True)
-        self.log_view.set_wrap_mode(Gtk.WrapMode.WORD) # Added this line for text wrapping
-        log_scroll = Gtk.ScrolledWindow()
-        log_scroll.set_hexpand(True)
-        log_scroll.set_vexpand(True)
-        log_scroll.set_min_content_height(80)
-        log_scroll.add(self.log_view)
-        log_vbox.pack_start(log_scroll, True, True, 0)
-        log_frame.add(log_vbox)
-        right_vbox.pack_start(log_frame, True, True, 0)
-
         top_hbox.pack_start(right_vbox, True, True, 0)
         main_vbox.pack_start(top_hbox, True, True, 0)
 
-        self.notebook.insert_page(main_vbox, Gtk.Label(label="Home"), 0)
+        # Notification overlay for info/error popups
+        self.notification_overlay = Gtk.Overlay()
+        self.notification_overlay.add(main_vbox)
+        self.notification_label = None
+        self.notification_timeout_id = None
+
+        self.notebook.insert_page(self.notification_overlay, Gtk.Label(label="Home"), 0)
 
     def create_button_panel(self):
         """Creates the bottom row with Auto Center, Generate and Export G-code buttons."""
@@ -769,7 +792,7 @@ class CNCDialog(Gtk.Dialog):
             self.gcode_preview_zoom = 1.0
             self.gcode_preview_offset = [0, 0]
             GLib.idle_add(self.gcode_preview.queue_draw)
-            logging.info("Objects centered on bed.")
+            logging.info("Objects centered on bed and Gcode Generated.")
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
@@ -855,10 +878,10 @@ class CNCDialog(Gtk.Dialog):
                 bed_h = float(current_config.get("bed_height", 200))
                 margin = float(current_config.get("safety_margin", 5))
 
-                # Perform boundary check
+                # Perform point-by-point out-of-bounds check (original behavior)
                 all_points_for_check = []
                 for path_list in [self.generated_cut_paths, self.generated_score_paths]:
-                    if path_list: # Ensure path_list is not None or empty
+                    if path_list:
                         for path in path_list:
                             for subpath in path:
                                 all_points_for_check.extend(subpath)
@@ -866,16 +889,30 @@ class CNCDialog(Gtk.Dialog):
                 out_of_bounds = False
                 if all_points_for_check:
                     for x, y in all_points_for_check:
-                        # Check if any point is outside the safe area
                         if not (margin <= x <= bed_w - margin and margin <= y <= bed_h - margin):
                             out_of_bounds = True
                             break
-                
+
+                # Track previous error state for fade-out
+                if not hasattr(self, '_prev_out_of_bounds'):
+                    self._prev_out_of_bounds = False
+
                 if out_of_bounds:
-                    GLib.idle_add(self.stop_progress)
                     msg = "Object detected outside of cutter area. Please adjust or re-center."
                     logging.error(msg) # Log as error
-                    return # Abort G-code generation
+                    self._prev_out_of_bounds = True
+                else:
+                    # If previously out_of_bounds, fade out the error notification
+                    if getattr(self, '_prev_out_of_bounds', False):
+                        GLib.idle_add(self.fade_out_error_notification)
+                    self._prev_out_of_bounds = False
+
+                # Always generate G-code and update preview, even if out_of_bounds
+                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
+                GLib.idle_add(self.stop_progress)
+                if not out_of_bounds:
+                    logging.info("G-code generated.")
 
                 # Generate G-code using the already prepared (e.g., centered) paths
                 gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
@@ -896,15 +933,81 @@ class CNCDialog(Gtk.Dialog):
 
     def log_message(self, msg, level="info"):
         """
-        Inserts a message into the log Gtk.TextView with appropriate coloring.
+        Shows a popup notification in the bottom left of the 2D preview area for info/warning messages (2s timeout),
+        and persistent for error messages until next info/error or fix. Error messages fade out quickly if resolved.
         """
-        end_iter = self.log_buffer.get_end_iter()
+        # Remove any existing notification label
+        if self.notification_label is not None:
+            self.notification_overlay.remove(self.notification_label)
+            self.notification_label = None
+        if self.notification_timeout_id is not None:
+            GLib.source_remove(self.notification_timeout_id)
+            self.notification_timeout_id = None
+
+        # Create a new label for the notification
+        label = Gtk.Label(label=msg)
+        label.set_halign(Gtk.Align.START)
+        label.set_valign(Gtk.Align.END)
+        label.set_margin_start(16)
+        label.set_margin_bottom(16)
+        label.set_xalign(0.0)
+        label.set_yalign(1.0)
+        label.set_selectable(False)
+        label.set_justify(Gtk.Justification.LEFT)
+        label.set_line_wrap(True)
+        label.set_max_width_chars(40)
+        # Style: blue for info, red for error
+        css = Gtk.CssProvider()
         if level == "error":
-            self.log_buffer.insert_with_tags(end_iter, msg + '\n', self.error_tag)
-        else: # Default to info (including warnings as per new request)
-            self.log_buffer.insert_with_tags(end_iter, msg + '\n', self.info_tag)
-        # Optionally, scroll to the end
-        self.log_view.scroll_to_iter(self.log_buffer.get_end_iter(), 0.0, False, 0, 0)
+            css.load_from_data(b"label { background-color: #ffdddd; color: #b00000; border-radius: 6px; padding: 8px 16px; font-weight: bold; font-size: 13px; }")
+        else:
+            css.load_from_data(b"label { background-color: #222; color: #fff; border-radius: 6px; padding: 8px 16px; font-weight: bold; font-size: 13px; }")
+        label.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.notification_overlay.add_overlay(label)
+        self.notification_label = label
+        label.show()
+
+        def fade_out_label():
+            # Animate opacity from 1.0 to 0.0 in 5 steps (60ms per step, total ~300ms)
+            if not self.notification_label:
+                return False
+            steps = 5
+            interval = 60
+            def step_fade(step=0):
+                if not self.notification_label:
+                    return False
+                opacity = max(0.0, 1.0 - (step + 1) / steps)
+                self.notification_label.set_opacity(opacity)
+                if step + 1 < steps:
+                    GLib.timeout_add(interval, step_fade, step + 1)
+                else:
+                    if self.notification_label:
+                        self.notification_overlay.remove(self.notification_label)
+                        self.notification_label = None
+                return False
+            step_fade()
+            self.notification_timeout_id = None
+            return False
+
+        # Info/warning: auto-hide after 2s. Error: stay until next info/error or fix, but fade out if replaced.
+        if level != "error":
+            def hide_label():
+                if self.notification_label is not None:
+                    fade_out_label()
+                self.notification_timeout_id = None
+                return False
+            self.notification_timeout_id = GLib.timeout_add(2000, hide_label)
+        else:
+            # For error, fade out if a new info/error comes in (handled above), or if user fixes the issue,
+            # call self.fade_out_error_notification() from the code that detects the fix.
+            self._fade_out_error_notification = fade_out_label
+
+    def fade_out_error_notification(self):
+        """Call this when the error condition is resolved to fade out the error notification."""
+        if hasattr(self, '_fade_out_error_notification') and self.notification_label:
+            self._fade_out_error_notification()
+            self._fade_out_error_notification = None
 
     def on_export_clicked(self, widget):
         """Handler for the 'Export G-code' button."""
