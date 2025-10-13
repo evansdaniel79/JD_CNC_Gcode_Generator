@@ -24,7 +24,7 @@
         "start_gcode": "; Start G-code\nM280 P0 S0 ; arm ESC\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\nM420 S1 \nM280 P0 S180 ; Start cutter\n",
         "end_gcode": "; End G-code\nG28\nM280 P0 S0 ; Stop cutter",
         "z_mode": "stepper",
-        "z_stepper_cut_height": "3.6",
+        "z_stepper_cut_height": "3.2",
         "z_stepper_travel_height": "15",
         "z_stepper_score_height": "6.8",
         "spindle_speed": "10000",
@@ -69,6 +69,6 @@
     },
     "last_export": {
         "dir": "/run/media/daniel/EFE8-F197",
-        "filename": "tiny_trainer_sheet2.gcode"
+        "filename": "tiny_trainer_fuselauge.gcode"
     }
 }

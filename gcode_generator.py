@@ -159,6 +159,12 @@ class CNCDialog(Gtk.Dialog):
                         self.generated_cut_paths = centered_cut
                         self.generated_score_paths = centered_score
                         self.gcode_generated = True
+                        # Immediately generate G-code from the centered paths on first show
+                        try:
+                            # Use the existing generation workflow which runs in a background thread
+                            self._generate_gcode_from_current_paths()
+                        except Exception:
+                            logging.exception("Failed to trigger initial G-code generation")
                 except Exception:
                     # Ignore parser errors during initial setup
                     pass
@@ -207,6 +213,14 @@ class CNCDialog(Gtk.Dialog):
             if self.auto_save_enabled:
                 current_config = self.get_config_from_ui()
                 self.config_manager.save_config(current_config)
+        def mark_gcode_stale(*args):
+            # Called when UI fields change — mark G-code as stale/not ready
+            try:
+                self.gcode_generated = False
+                # Update combined button appearance
+                GLib.idle_add(self.update_generate_export_button)
+            except Exception:
+                pass
         # Entry fields
         def entry_commit_handler(entry, *args):
             pass  # No undo/redo, so nothing needed here
@@ -214,17 +228,49 @@ class CNCDialog(Gtk.Dialog):
                       self.servo_score_entry, self.servo_cut_entry, self.servo_travel_entry,
                       self.servo_delay_entry, self.tool_offset_x_entry, self.tool_offset_y_entry,
                       self.tool_diameter_entry, self.travel_speed_entry, self.z_plunge_speed_entry, self.z_raise_speed_entry, self.cutting_speed_entry, self.scoring_speed_entry,
-                      self.max_velocity_xy_entry, self.max_velocity_z_entry, self.max_acceleration_entry, self.jerk_entry, self.speed_override_entry, self.safety_margin_entry, self.spindle_speed_entry,
+                      self.speed_override_entry, self.safety_margin_entry,
                       self.z_stepper_cut_entry, self.z_stepper_score_entry, self.z_stepper_travel_entry]:
             entry.connect("changed", auto_save)
+            entry.connect("changed", mark_gcode_stale)
             entry.connect("focus-out-event", entry_commit_handler)
             entry.connect("activate", entry_commit_handler)
         # Radio buttons (origin)
         for btn in [self.origin_front_left, self.origin_front_right, self.origin_center, self.origin_back_left, self.origin_back_right]:
             btn.connect("toggled", lambda *a: None)
+            btn.connect("toggled", mark_gcode_stale)
         # Text buffers
         self.start_gcode_buffer.connect("changed", auto_save)
+        self.start_gcode_buffer.connect("changed", mark_gcode_stale)
         self.end_gcode_buffer.connect("changed", auto_save)
+        self.end_gcode_buffer.connect("changed", mark_gcode_stale)
+
+    def update_generate_export_button(self):
+        """Update the primary button styling based on whether G-code is ready."""
+        try:
+            btn = getattr(self, 'generate_export_button', None)
+            if not btn:
+                return
+            ctx = btn.get_style_context()
+            # Determine readiness: generated flag and G-code buffer not empty
+            gcode_text = self.gcode_text_buffer.get_text(self.gcode_text_buffer.get_start_iter(), self.gcode_text_buffer.get_end_iter(), False) if hasattr(self, 'gcode_text_buffer') else ''
+            ready = bool(self.gcode_generated and gcode_text.strip())
+            if ready:
+                ctx.add_class('suggested-action')
+                # When ready, show export label
+                try:
+                    btn.set_label('Export G-code')
+                except Exception:
+                    pass
+            else:
+                ctx.remove_class('suggested-action')
+                try:
+                    btn.set_label('Generate G-code')
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Note: G-code ready/not-ready is indicated by the primary button appearance; helper methods removed.
 
     def create_frame(self, label, margin=10):
         """Helper to create a styled frame without a visible label/title."""
@@ -457,18 +503,7 @@ class CNCDialog(Gtk.Dialog):
         grid.attach(self.tool_diameter_entry, 1, row, 1, 1)
         grid.attach(Gtk.Label(label="mm"), 2, row, 1, 1)
         row += 1
-        # Spindle Section Header
-        spindle_label = Gtk.Label()
-        spindle_label.set_markup('<b>Spindle</b>')
-        spindle_label.set_halign(Gtk.Align.START)
-        grid.attach(spindle_label, 0, row, 3, 1)
-        row += 1
-        # Spindle Speed
-        grid.attach(Gtk.Label(label="Spindle Speed"), 0, row, 1, 1)
-        self.spindle_speed_entry = Gtk.Entry()
-        grid.attach(self.spindle_speed_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="RPM"), 2, row, 1, 1)
-        row += 1
+    # Spindle section removed per user request
 
         self.notebook.append_page(frame, Gtk.Label(label="Tool Options"))
 
@@ -513,37 +548,7 @@ class CNCDialog(Gtk.Dialog):
         grid.attach(self.z_raise_speed_entry, 1, row, 1, 1)
         grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
         row += 1
-        # Limits Section Header
-        limits_label = Gtk.Label()
-        limits_label.set_markup('<b>Machine Limits</b>')
-        limits_label.set_halign(Gtk.Align.START)
-        grid.attach(limits_label, 0, row, 3, 1)
-        row += 1
-        # Max Velocity X/Y
-        grid.attach(Gtk.Label(label="Max Velocity X/Y"), 0, row, 1, 1)
-        self.max_velocity_xy_entry = Gtk.Entry()
-        grid.attach(self.max_velocity_xy_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
-        row += 1
-        # Max Velocity Z (only for stepper)
-        grid.attach(Gtk.Label(label="Max Velocity Z"), 0, row, 1, 1)
-        self.max_velocity_z_entry = Gtk.Entry()
-        grid.attach(self.max_velocity_z_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="mm/s"), 2, row, 1, 1)
-        self.max_velocity_z_row = row
-        row += 1
-        # Max Acceleration
-        grid.attach(Gtk.Label(label="Max Acceleration"), 0, row, 1, 1)
-        self.max_acceleration_entry = Gtk.Entry()
-        grid.attach(self.max_acceleration_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="mm/s²"), 2, row, 1, 1)
-        row += 1
-        # Jerk
-        grid.attach(Gtk.Label(label="Jerk"), 0, row, 1, 1)
-        self.jerk_entry = Gtk.Entry()
-        grid.attach(self.jerk_entry, 1, row, 1, 1)
-        grid.attach(Gtk.Label(label="mm/s³"), 2, row, 1, 1)
-        row += 1
+        # Machine Limits section removed per user request
         # Safety Margin
         grid.attach(Gtk.Label(label="Safety Margin"), 0, row, 1, 1)
         self.safety_margin_entry = Gtk.Entry()
@@ -551,18 +556,7 @@ class CNCDialog(Gtk.Dialog):
         grid.attach(Gtk.Label(label="mm"), 2, row, 1, 1)
         self.notebook.append_page(frame, Gtk.Label(label="Speeds & Limits"))
 
-        # Show/hide Z velocity field based on Z mode
-        def update_z_velocity_visibility():
-            mode_text = self.z_mode_combo.get_active_text()
-            mode = mode_text.lower() if mode_text else "servo"
-            visible = (mode == "stepper")
-            self.max_velocity_z_entry.set_visible(visible)
-            # Also hide/show the label next to it
-            for child in grid.get_children():
-                if isinstance(child, Gtk.Label) and child.get_text() == "Max Velocity Z":
-                    child.set_visible(visible)
-        self.z_mode_combo.connect("changed", lambda combo: update_z_velocity_visibility())
-        update_z_velocity_visibility()
+        # No machine limits to toggle visibility for (removed per user request)
 
     def create_gcode_templates_tab(self):
         """Creates the G-code Templates tab."""
@@ -658,22 +652,15 @@ class CNCDialog(Gtk.Dialog):
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         button_box.set_halign(Gtk.Align.END) # Align buttons to the end (right)
 
-        # --- Export G-code button ---
-        export_button = Gtk.Button(label="Export G-code")
-        export_button.get_style_context().add_class("suggested-action")
-        export_button.connect("clicked", self.on_export_clicked)
-        # Pack this last so it appears on the rightmost
-        button_box.pack_end(export_button, False, False, 0)
-
-        # --- Generate G-code button with overlay ---
-        self.generate_button = Gtk.Button(label="Generate G-code")
-        self.generate_button.connect("clicked", self.on_generate_clicked)
+        # --- Combined Generate/Export button with overlay ---
+        self.generate_export_button = Gtk.Button(label="Generate G-code")
+        self.generate_export_button.connect("clicked", self.on_generate_export_clicked)
         self.generate_button_overlay = Gtk.Overlay()
-        self.generate_button_overlay.set_size_request(160, 36) # Consistent size
-        self.generate_button_overlay.add(self.generate_button)
-        # Progress haze overlay
+        self.generate_button_overlay.set_size_request(200, 36) # Slightly wider for label changes
+        self.generate_button_overlay.add(self.generate_export_button)
+        # Progress haze overlay (used during generation)
         self.progress_haze = Gtk.DrawingArea()
-        self.progress_haze.set_size_request(160, 36)
+        self.progress_haze.set_size_request(200, 36)
         self.progress_haze.set_no_show_all(True)
         self.progress_haze.set_opacity(0.5)
         self.progress_haze.connect("draw", self.on_progress_haze_draw)
@@ -681,14 +668,14 @@ class CNCDialog(Gtk.Dialog):
         self.progress_fraction = 0.0
         self.progress_animating = False
         self.progress_haze.hide()  # Ensure haze is hidden at startup
-        # Pack this before export button
+        # Pack this before Auto Center so it appears on the rightmost
         button_box.pack_end(self.generate_button_overlay, False, False, 0)
 
         # --- Auto Center button ---
         self.auto_center_button = Gtk.Button(label="Auto Center")
         self.auto_center_button.connect("clicked", self.on_auto_center_clicked)
         # Set size request to match other buttons for consistency
-        self.auto_center_button.set_size_request(160, 36) 
+        self.auto_center_button.set_size_request(160, 36)
         # Pack this first so it appears on the leftmost of the group
         button_box.pack_end(self.auto_center_button, False, False, 0)
 
@@ -707,7 +694,11 @@ class CNCDialog(Gtk.Dialog):
         self.progress_fraction = 0.0
         self.progress_animating = True
         self.progress_haze.show()
-        self.generate_button.set_sensitive(False)
+        # Disable the primary combined button during generation
+        try:
+            self.generate_export_button.set_sensitive(False)
+        except Exception:
+            pass
         # Disable auto center button during generation
         self.auto_center_button.set_sensitive(False) 
         self._progress_tick()
@@ -715,7 +706,10 @@ class CNCDialog(Gtk.Dialog):
     def stop_progress(self):
         self.progress_animating = False
         self.progress_haze.hide()
-        self.generate_button.set_sensitive(True)
+        try:
+            self.generate_export_button.set_sensitive(True)
+        except Exception:
+            pass
         # Re-enable auto center button after generation
         self.auto_center_button.set_sensitive(True) 
         self.progress_fraction = 0.0
@@ -735,13 +729,34 @@ class CNCDialog(Gtk.Dialog):
 
     def on_generate_clicked(self, widget):
         """Handler for the 'Generate G-code' button."""
-        self._generate_gcode_from_current_paths()
+        # Legacy alias to the combined handler
+        self.on_generate_export_clicked(widget)
+
+    def on_generate_export_clicked(self, widget):
+        """Combined handler: if G-code is ready, export; otherwise generate."""
+        # Determine readiness
+        try:
+            gcode_text = self.gcode_text_buffer.get_text(self.gcode_text_buffer.get_start_iter(), self.gcode_text_buffer.get_end_iter(), False)
+        except Exception:
+            gcode_text = ''
+        ready = bool(self.gcode_generated and gcode_text.strip())
+        if ready:
+            # Export current G-code
+            # Reuse export flow but avoid opening empty dialogs if nothing to export
+            self.on_export_clicked(widget)
+        else:
+            # Generate G-code
+            self._generate_gcode_from_current_paths()
 
     def on_auto_center_clicked(self, widget):
         """Handler for the 'Auto Center' button."""
         # Always re-center the objects on the bed, not just reset the view
         try:
             current_config = self.get_config_from_ui()
+            # Defensive: svg_parser may be None if Effect wasn't provided or parser failed
+            if not hasattr(self, 'svg_parser') or self.svg_parser is None:
+                logging.warning("SVG parser not available: cannot auto-center. Make sure to run from Inkscape with a selection.")
+                return
             cut_paths, score_paths = self.svg_parser.get_paths_by_color()
             bed_w = float(current_config.get("bed_width", 300))
             bed_h = float(current_config.get("bed_height", 200))
@@ -768,7 +783,10 @@ class CNCDialog(Gtk.Dialog):
         # No progress indicator for just centering, as it's usually very fast.
         try:
             current_config = self.get_config_from_ui()
-            cut_paths, score_paths = self.svg_parser.get_paths_by_color() 
+            if not hasattr(self, 'svg_parser') or self.svg_parser is None:
+                logging.warning("SVG parser not available: cannot auto-center paths.")
+                return
+            cut_paths, score_paths = self.svg_parser.get_paths_by_color()
 
             # Debug: log number of original SVG paths detected
             num_cut_svg = len(cut_paths) if cut_paths else 0
@@ -810,86 +828,10 @@ class CNCDialog(Gtk.Dialog):
             logging.error(tb) # Log traceback
 
             GLib.idle_add(self.gcode_preview.queue_draw) # Redraw preview with centered paths
-            logging.info("Objects centered.")
+            logging.info("Auto-center aborted due to error.")
 
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            logging.error(f"Error during auto-centering: {e}") # Log as error
-            logging.error(tb) # Log traceback
-
-    def _generate_gcode_from_current_paths(self):
-        """
-        Generates G-code from the current internal paths (self.generated_cut_paths, self.generated_score_paths).
-        Triggers progress indicator.
-        """
-        self.start_progress() # Show progress indicator
-
-        def generate_gcode_bg():
-            try:
-                current_config = self.get_config_from_ui()
-
-                if not self.generated_cut_paths and not self.generated_score_paths:
-                    GLib.idle_add(self.stop_progress)
-                    msg = "No paths available to generate G-code. Please select objects and/or auto-center first."
-                    logging.warning(msg) # Log as warning, will be displayed as info
-                    return
-
-                bed_w = float(current_config.get("bed_width", 300))
-                bed_h = float(current_config.get("bed_height", 200))
-                margin = float(current_config.get("safety_margin", 5))
-
-                # Perform point-by-point out-of-bounds check (original behavior)
-                all_points_for_check = []
-                for path_list in [self.generated_cut_paths, self.generated_score_paths]:
-                    if path_list:
-                        for path in path_list:
-                            for subpath in path:
-                                all_points_for_check.extend(subpath)
-
-                out_of_bounds = False
-                if all_points_for_check:
-                    for x, y in all_points_for_check:
-                        if not (margin <= x <= bed_w - margin and margin <= y <= bed_h - margin):
-                            out_of_bounds = True
-                            break
-
-                # Track previous error state for fade-out
-                if not hasattr(self, '_prev_out_of_bounds'):
-                    self._prev_out_of_bounds = False
-
-                if out_of_bounds:
-                    msg = "Object detected outside of cutter area. Please adjust or re-center."
-                    logging.error(msg) # Log as error
-                    self._prev_out_of_bounds = True
-                else:
-                    # If previously out_of_bounds, fade out the error notification
-                    if getattr(self, '_prev_out_of_bounds', False):
-                        GLib.idle_add(self.fade_out_error_notification)
-                    self._prev_out_of_bounds = False
-
-                # Always generate G-code and update preview, even if out_of_bounds
-                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
-                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
-                GLib.idle_add(self.stop_progress)
-                if not out_of_bounds:
-                    logging.info("G-code generated.")
-
-                # Generate G-code using the already prepared (e.g., centered) paths
-                gcode, stats = self.gcode_logic.generate(current_config, self.generated_cut_paths, self.generated_score_paths)
-
-                GLib.idle_add(self.set_gcode_text, gcode, stats, self.generated_cut_paths, self.generated_score_paths)
-                GLib.idle_add(self.stop_progress)
-                logging.info("G-code generated.")
-
-            except Exception as e:
-                GLib.idle_add(self.stop_progress)
-                import traceback
-                tb = traceback.format_exc()
-                logging.error(f"Error during G-code generation: {e}") # Log as error
-                logging.error(tb) # Log traceback
-
-        threading.Thread(target=generate_gcode_bg, daemon=True).start()
+    # Note: The primary implementation of _generate_gcode_from_current_paths is defined earlier in the file.
+    # Duplicate/older copies were removed to avoid running generation twice and to keep a single source of truth.
 
 
     def log_message(self, msg, level="info"):
@@ -1012,9 +954,24 @@ class CNCDialog(Gtk.Dialog):
             filename = dialog.get_filename()
             if filename:
                 self.config_manager.save_last_export_info(os.path.dirname(filename), os.path.basename(filename))
-                with open(filename, 'w') as f:
-                    f.write(gcode)
-                self.log_message(f"G-code exported to {filename}")
+                try:
+                    with open(filename, 'w') as f:
+                        f.write(gcode)
+                except OSError as oe:
+                    logging.error(f"Failed to write G-code to {filename}: {oe}")
+                    # Show a user-friendly error dialog
+                    err_dialog = Gtk.MessageDialog(
+                        transient_for=self,
+                        flags=0,
+                        message_type=Gtk.MessageType.ERROR,
+                        buttons=Gtk.ButtonsType.OK,
+                        text="Failed to export G-code",
+                    )
+                    err_dialog.format_secondary_text(f"Could not write to {filename}: {oe}")
+                    err_dialog.run()
+                    err_dialog.destroy()
+                else:
+                    self.log_message(f"G-code exported to {filename}")
         dialog.destroy() # Destroy the dialog after all dialog methods
         
 
@@ -1119,11 +1076,15 @@ class CNCDialog(Gtk.Dialog):
         self.z_raise_speed_entry.set_text(c.get("z_raise_speed", "20"))
         self.cutting_speed_entry.set_text(c.get("cutting_speed", "1500"))
         self.scoring_speed_entry.set_text(c.get("scoring_speed", "800"))
-        # Machine Limits
-        self.max_velocity_xy_entry.set_text(c.get("max_velocity_xy", "5000"))
-        self.max_velocity_z_entry.set_text(c.get("max_velocity_z", "5000"))
-        self.max_acceleration_entry.set_text(c.get("max_acceleration", "100"))
-        self.jerk_entry.set_text(c.get("jerk", "10"))
+        # Machine Limits (widgets removed; set only if present)
+        if hasattr(self, 'max_velocity_xy_entry'):
+            self.max_velocity_xy_entry.set_text(c.get("max_velocity_xy", "5000"))
+        if hasattr(self, 'max_velocity_z_entry'):
+            self.max_velocity_z_entry.set_text(c.get("max_velocity_z", "5000"))
+        if hasattr(self, 'max_acceleration_entry'):
+            self.max_acceleration_entry.set_text(c.get("max_acceleration", "100"))
+        if hasattr(self, 'jerk_entry'):
+            self.jerk_entry.set_text(c.get("jerk", "10"))
         # Speed Override
         self.speed_override_entry.set_text(c.get("speed_override", "100"))
         # Safety Margin
@@ -1148,8 +1109,9 @@ class CNCDialog(Gtk.Dialog):
         if hasattr(self, "z_stepper_cut_entry"): self.z_stepper_cut_entry.set_text(c.get("z_stepper_cut_height", "-2.0"))
         if hasattr(self, "z_stepper_score_entry"): self.z_stepper_score_entry.set_text(c.get("z_stepper_score_height", "10"))
         if hasattr(self, "z_stepper_travel_entry"): self.z_stepper_travel_entry.set_text(c.get("z_stepper_travel_height", "5.0"))
-        # Spindle Speed
-        self.spindle_speed_entry.set_text(c.get("spindle_speed", "10000"))
+        # Spindle Speed (widget removed; set only if present)
+        if hasattr(self, 'spindle_speed_entry'):
+            self.spindle_speed_entry.set_text(c.get("spindle_speed", "10000"))
         # Units and additional settings
         if hasattr(self, "units_combo"): self.units_combo.set_active(int(c.get("units", 0)))
         if hasattr(self, "plunge_speed_entry"): self.plunge_speed_entry.set_text(c.get("plunge_speed", "500"))
@@ -1190,11 +1152,11 @@ class CNCDialog(Gtk.Dialog):
         config["z_raise_speed"] = self.z_raise_speed_entry.get_text()
         config["cutting_speed"] = self.cutting_speed_entry.get_text()
         config["scoring_speed"] = self.scoring_speed_entry.get_text()
-        # Machine Limits
-        config["max_velocity_xy"] = self.max_velocity_xy_entry.get_text()
-        config["max_velocity_z"] = self.max_velocity_z_entry.get_text()
-        config["max_acceleration"] = self.max_acceleration_entry.get_text()  # Already mm/s²
-        config["jerk"] = self.jerk_entry.get_text()  # Already mm/s³
+        # Machine Limits (widgets may have been removed)
+        config["max_velocity_xy"] = self.max_velocity_xy_entry.get_text() if hasattr(self, 'max_velocity_xy_entry') else "5000"
+        config["max_velocity_z"] = self.max_velocity_z_entry.get_text() if hasattr(self, 'max_velocity_z_entry') else "5000"
+        config["max_acceleration"] = self.max_acceleration_entry.get_text() if hasattr(self, 'max_acceleration_entry') else "100"
+        config["jerk"] = self.jerk_entry.get_text() if hasattr(self, 'jerk_entry') else "10"
         # Speed Override
         config["speed_override"] = self.speed_override_entry.get_text()
         # Safety Margin
@@ -1208,8 +1170,8 @@ class CNCDialog(Gtk.Dialog):
         config["z_stepper_cut_height"] = self.z_stepper_cut_entry.get_text() if hasattr(self, "z_stepper_cut_entry") else "-2.0"
         config["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text() if hasattr(self, "z_stepper_travel_entry") else "5.0"
         config["z_stepper_score_height"] = self.z_stepper_score_entry.get_text() if hasattr(self, "z_stepper_score_entry") else "10"
-        # Spindle Speed
-        config["spindle_speed"] = self.spindle_speed_entry.get_text()
+        # Spindle Speed (widget removed in UI; return default if not present)
+        config["spindle_speed"] = self.spindle_speed_entry.get_text() if hasattr(self, 'spindle_speed_entry') else "10000"
         # Additional settings
         config["units"] = getattr(self, "units_combo", None).get_active() if hasattr(self, "units_combo") else 0
         config["plunge_speed"] = getattr(self, "plunge_speed_entry", None).get_text() if hasattr(self, "plunge_speed_entry") else "500"
@@ -1467,6 +1429,16 @@ class CNCDialog(Gtk.Dialog):
             self.generated_score_paths = None
             self.gcode_generated = False
         self.gcode_preview.queue_draw()
+        # Notify the user briefly that generation completed with small stats summary
+        try:
+            # Per user preference: only a simple notification without stats
+            GLib.idle_add(self.log_message, 'G-code generated!!', 'info')
+        except Exception:
+            pass
+        try:
+            GLib.idle_add(self.update_generate_export_button)
+        except Exception:
+            pass
 
     def on_generate_gcode_clicked(self, button):
         # This method is now redundant, as on_generate_clicked calls _generate_gcode_from_current_paths
@@ -1665,8 +1637,21 @@ class JDCncGcodeGenerator(inkex.Effect):
     def effect(self):
         """This is called by Inkscape when the user runs the extension."""
         if not self.svg.selection:
-            import logging
-            logging.error("Please select objects before running the CNC G-code Generator.")
+            # Show a GTK dialog to inform the user they need to select objects
+            try:
+                dlg = Gtk.MessageDialog(
+                    transient_for=None,
+                    flags=0,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="No objects selected",
+                )
+                dlg.format_secondary_text("Please select one or more paths or shapes in Inkscape before running the CNC G-code Generator.")
+                dlg.run()
+                dlg.destroy()
+            except Exception:
+                # If dialogs can't be created in this environment, fall back to logging
+                logging.error("Please select objects before running the CNC G-code Generator.")
             return
         # Pass the Effect instance so CNCDialog can access the current SVG document
         dialog = CNCDialog(None, effect=self)
