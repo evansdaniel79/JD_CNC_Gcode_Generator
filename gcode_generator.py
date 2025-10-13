@@ -362,7 +362,6 @@ class CNCDialog(Gtk.Dialog):
 
                 # Debug logging for state transitions
                 debug_msg = f"[DEBUG] out_of_bounds={out_of_bounds}, prev={self._prev_out_of_bounds}"
-                print(debug_msg)
                 logging.debug(debug_msg)
 
                 if out_of_bounds:
