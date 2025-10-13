@@ -618,7 +618,10 @@ class CNCDialog(Gtk.Dialog):
 
         # --- Right panel: G-code only ---
         right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        right_vbox.set_hexpand(True)
+        # Prevent the right panel from auto-resizing when the canvas selection changes.
+        # Use a fixed width; user can request a different width later if desired.
+        right_vbox.set_hexpand(False)
+        right_vbox.set_size_request(360, -1)
         gcode_frame = Gtk.Frame()
         gcode_frame.set_shadow_type(Gtk.ShadowType.IN)
         gcode_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -635,7 +638,31 @@ class CNCDialog(Gtk.Dialog):
         gcode_vbox.pack_start(gcode_scroll, True, True, 0)
         gcode_frame.add(gcode_vbox)
         right_vbox.pack_start(gcode_frame, True, True, 0)
-        top_hbox.pack_start(right_vbox, True, True, 0)
+        # --- Object Info box (shows bounding box dims and top-left position) ---
+        info_frame = Gtk.Frame()
+        info_frame.set_shadow_type(Gtk.ShadowType.IN)
+        info_frame.set_hexpand(True)
+        info_frame.set_vexpand(False)
+        info_grid = Gtk.Grid(column_spacing=8, row_spacing=4)
+        info_grid.set_margin_top(6)
+        info_grid.set_margin_bottom(6)
+        info_grid.set_margin_start(6)
+        info_grid.set_margin_end(6)
+        # Labels
+        info_grid.attach(Gtk.Label(label="Width (mm):", halign=Gtk.Align.START), 0, 0, 1, 1)
+        self.objinfo_width_label = Gtk.Label(label="N/A", halign=Gtk.Align.START)
+        info_grid.attach(self.objinfo_width_label, 1, 0, 1, 1)
+        info_grid.attach(Gtk.Label(label="Height (mm):", halign=Gtk.Align.START), 0, 1, 1, 1)
+        self.objinfo_height_label = Gtk.Label(label="N/A", halign=Gtk.Align.START)
+        info_grid.attach(self.objinfo_height_label, 1, 1, 1, 1)
+        # Position (top-left X,Y)
+        info_grid.attach(Gtk.Label(label="Position (X,Y) mm:", halign=Gtk.Align.START), 0, 2, 1, 1)
+        self.objinfo_pos_label = Gtk.Label(label="N/A", halign=Gtk.Align.START)
+        info_grid.attach(self.objinfo_pos_label, 1, 2, 1, 1)
+        info_frame.add(info_grid)
+        right_vbox.pack_start(info_frame, False, False, 0)
+        # Pack the right panel without allowing it to expand horizontally so its width stays fixed
+        top_hbox.pack_start(right_vbox, False, False, 0)
         main_vbox.pack_start(top_hbox, True, True, 0)
 
         # Notification overlay for info/error popups
@@ -1438,6 +1465,11 @@ class CNCDialog(Gtk.Dialog):
             GLib.idle_add(self.update_generate_export_button)
         except Exception:
             pass
+        # Update the object info box after G-code (and internal paths) have been set
+        try:
+            GLib.idle_add(self.update_object_info)
+        except Exception:
+            pass
 
     def on_generate_gcode_clicked(self, button):
         # This method is now redundant, as on_generate_clicked calls _generate_gcode_from_current_paths
@@ -1477,6 +1509,47 @@ class CNCDialog(Gtk.Dialog):
         gcode, stats = self.gcode_logic.generate(config, cut_paths, score_paths)
         self.set_gcode_text(gcode, stats, cut_paths, score_paths)
         logging.info("G-code generated. Stats: " + str(stats))
+
+    def update_object_info(self):
+        """Update the object info labels showing bounding box and top-left position in mm."""
+        # Default to N/A
+        def set_na():
+            try:
+                self.objinfo_width_label.set_text("N/A")
+                self.objinfo_height_label.set_text("N/A")
+                self.objinfo_pos_label.set_text("N/A")
+            except Exception:
+                pass
+        try:
+            cut = self.generated_cut_paths or []
+            score = self.generated_score_paths or []
+            all_points = []
+            for p in cut + score:
+                for sub in p:
+                    all_points.extend(sub)
+            if not all_points:
+                set_na()
+                return
+            xs = [pt[0] for pt in all_points]
+            ys = [pt[1] for pt in all_points]
+            min_x = min(xs)
+            max_x = max(xs)
+            min_y = min(ys)
+            max_y = max(ys)
+            width = max_x - min_x
+            height = max_y - min_y
+            # Round to 1 decimal as requested
+            width_s = f"{width:.1f}"
+            height_s = f"{height:.1f}"
+            tlx = min_x
+            tly = min_y
+            pos_s = f"{tlx:.1f}, {tly:.1f}"
+            # Update labels
+            self.objinfo_width_label.set_text(width_s)
+            self.objinfo_height_label.set_text(height_s)
+            self.objinfo_pos_label.set_text(pos_s)
+        except Exception:
+            set_na()
 
     def center_paths_on_bed(self, cut_paths, score_paths, bed_w, bed_h, margin=0):
         """Centers all paths as a group on the bed, returns new cut_paths and score_paths lists. Handles subpaths."""
