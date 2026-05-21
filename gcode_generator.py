@@ -4,8 +4,12 @@ JD CNC G-code Generator — Main Extension File
 Inkscape extension for generating CNC G-code from SVG paths.
 """
 import warnings
-# Suppress asyncio deprecation warnings from gi bindings on Python 3.14+
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="gi")
+# Suppress asyncio deprecation warnings emitted by gi.events on Python 3.14+.
+# They fire during 'import gi' itself, so filter by message before importing.
+warnings.filterwarnings("ignore", category=DeprecationWarning,
+                        message=r".*asyncio\..*")
+warnings.filterwarnings("ignore", category=DeprecationWarning,
+                        module=r"gi(\..*)?")
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -396,6 +400,20 @@ class CNCDialog(Gtk.Dialog):
         r += 1
         grid.attach(self.origin_back_left,  0, r, 1, 1)
         grid.attach(self.origin_back_right, 1, r, 1, 1)
+        r += 1
+
+        # ── Safety margin ──
+        sep2 = Gtk.Label()
+        sep2.set_markup("<b>Safety Margin</b>")
+        sep2.set_halign(Gtk.Align.START)
+        sep2.set_margin_top(8)
+        grid.attach(sep2, 0, r, 3, 1)
+        r += 1
+
+        grid.attach(Gtk.Label(label="Margin", halign=Gtk.Align.START), 0, r, 1, 1)
+        self.safety_margin_entry = Gtk.Entry()
+        grid.attach(self.safety_margin_entry, 1, r, 1, 1)
+        grid.attach(Gtk.Label(label="mm"), 2, r, 1, 1)
 
         self.notebook.append_page(frame, Gtk.Label(label="Bed & Origin"))
 
@@ -436,7 +454,9 @@ class CNCDialog(Gtk.Dialog):
             ("servo_delay_entry",  "Servo Delay (ms)"),
         ]:
             row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            row_box.pack_start(Gtk.Label(label=label, halign=Gtk.Align.START, width_chars=28), False, False, 0)
+            lbl = Gtk.Label(label=label, width_chars=24)
+            lbl.set_xalign(0.0)               # text flush-left inside the label
+            row_box.pack_start(lbl, False, False, 0)
             entry = Gtk.Entry()
             setattr(self, attr, entry)
             row_box.pack_start(entry, True, True, 0)
@@ -450,7 +470,9 @@ class CNCDialog(Gtk.Dialog):
             ("z_stepper_travel_entry", "Travel Height (mm)"),
         ]:
             row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            row_box.pack_start(Gtk.Label(label=label, halign=Gtk.Align.START, width_chars=28), False, False, 0)
+            lbl = Gtk.Label(label=label, width_chars=24)
+            lbl.set_xalign(0.0)
+            row_box.pack_start(lbl, False, False, 0)
             entry = Gtk.Entry()
             setattr(self, attr, entry)
             row_box.pack_start(entry, True, True, 0)
@@ -503,13 +525,11 @@ class CNCDialog(Gtk.Dialog):
         r += 1
 
         speed_fields = [
-            ("speed_override_entry",  "Speed Override",            "%"),
             ("travel_speed_entry",    "Travel Speed (cutter up)",  "mm/s"),
             ("cutting_speed_entry",   "Cutting Speed (black)",     "mm/s"),
             ("scoring_speed_entry",   "Scoring Speed (red)",       "mm/s"),
             ("z_plunge_speed_entry",  "Z Plunge Speed (down)",     "mm/s"),
             ("z_raise_speed_entry",   "Z Raise Speed (up)",        "mm/s"),
-            ("safety_margin_entry",   "Safety Margin",             "mm"),
         ]
         for attr, label, unit in speed_fields:
             grid.attach(Gtk.Label(label=label, halign=Gtk.Align.START), 0, r, 1, 1)
@@ -553,18 +573,15 @@ class CNCDialog(Gtk.Dialog):
     # ── Button panel ─────────────────────────────────────────────────────────
 
     def _create_button_panel(self):
-        # Horizontal bar: status text on the left, action buttons on the right.
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        box.set_margin_top(4)
-        box.set_margin_bottom(4)
-        box.set_margin_start(10)
-        box.set_margin_end(10)
+        # Right-aligned action buttons only.
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        outer.set_margin_top(5)
+        outer.set_margin_bottom(5)
+        outer.set_margin_start(8)
+        outer.set_margin_end(8)
 
-        # Left-aligned status label so the bar isn't empty dead space
-        self._status_label = Gtk.Label(label=f"JD CNC G-code Generator  v{SCRIPT_VERSION}")
-        self._status_label.set_halign(Gtk.Align.START)
-        self._status_label.get_style_context().add_class("info-label")
-        box.pack_start(self._status_label, True, True, 0)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_halign(Gtk.Align.END)
 
         # Auto Center
         self.auto_center_button = Gtk.Button(label="Auto Center")
@@ -588,10 +605,11 @@ class CNCDialog(Gtk.Dialog):
         btn_overlay.add_overlay(self.progress_haze)
         self.progress_haze.hide()
 
-        # Pack right-side buttons (order: Auto Center, then Generate/Export)
         box.pack_start(self.auto_center_button, False, False, 0)
         box.pack_start(btn_overlay,             False, False, 0)
-        return box
+
+        outer.pack_end(box, False, False, 0)
+        return outer
 
     # ── Hamburger menu ────────────────────────────────────────────────────────
 
@@ -659,7 +677,7 @@ class CNCDialog(Gtk.Dialog):
             self.tool_diameter_entry,
             self.travel_speed_entry, self.z_plunge_speed_entry,
             self.z_raise_speed_entry, self.cutting_speed_entry,
-            self.scoring_speed_entry, self.speed_override_entry,
+            self.scoring_speed_entry,
             self.safety_margin_entry,
             self.z_stepper_cut_entry, self.z_stepper_score_entry,
             self.z_stepper_travel_entry,
@@ -951,13 +969,6 @@ class CNCDialog(Gtk.Dialog):
         self._info_cut_paths.set_text(str(n_cut))
         self._info_score_paths.set_text(str(n_score))
 
-        # Status bar — show a quick summary if G-code is ready
-        if stats and hasattr(self, "_status_label"):
-            self._status_label.set_text(
-                f"Ready  ·  {n_cut + n_score} path(s)  ·  "
-                f"{stats.get('distance', 0.0):.0f} mm cut"
-            )
-
     def _update_generate_export_button(self):
         """Flip button label and style between Generate and Export states."""
         try:
@@ -1013,7 +1024,6 @@ class CNCDialog(Gtk.Dialog):
         self.scoring_speed_entry.set_text( c.get("scoring_speed",  "12"))
         self.z_plunge_speed_entry.set_text(c.get("z_plunge_speed", "12"))
         self.z_raise_speed_entry.set_text( c.get("z_raise_speed",  "12"))
-        self.speed_override_entry.set_text(c.get("speed_override", "100"))
         self.safety_margin_entry.set_text( c.get("safety_margin",  "5"))
 
         self.start_gcode_buffer.set_text(c.get("start_gcode", ""))
@@ -1060,7 +1070,6 @@ class CNCDialog(Gtk.Dialog):
         cfg["scoring_speed"]   = self.scoring_speed_entry.get_text()
         cfg["z_plunge_speed"]  = self.z_plunge_speed_entry.get_text()
         cfg["z_raise_speed"]   = self.z_raise_speed_entry.get_text()
-        cfg["speed_override"]  = self.speed_override_entry.get_text()
         cfg["safety_margin"]   = self.safety_margin_entry.get_text()
 
         cfg["start_gcode"] = self.start_gcode_buffer.get_text(
@@ -1076,17 +1085,6 @@ class CNCDialog(Gtk.Dialog):
         cfg["z_stepper_cut_height"]    = self.z_stepper_cut_entry.get_text()
         cfg["z_stepper_score_height"]  = self.z_stepper_score_entry.get_text()
         cfg["z_stepper_travel_height"] = self.z_stepper_travel_entry.get_text()
-
-        # Carry over fields not in the UI so templates can still reference them
-        cfg.setdefault("spindle_speed", "10000")
-        cfg.setdefault("units", 0)
-        cfg.setdefault("plunge_speed", "500")
-        cfg.setdefault("score_line_color", "#00FF00")
-        cfg.setdefault("cut_line_color",   "#FF0000")
-        cfg.setdefault("max_velocity_xy",  "5000")
-        cfg.setdefault("max_velocity_z",   "5000")
-        cfg.setdefault("max_acceleration", "100")
-        cfg.setdefault("jerk", "10")
 
         return cfg
 
@@ -1358,11 +1356,11 @@ class CNCDialog(Gtk.Dialog):
             cr.move_to(0, y); cr.line_to(bed_w, y)
         cr.stroke()
 
-        # ── Safety margin (dashed orange) ──
-        dash = 5.0 / scale
-        cr.set_source_rgba(1.0, 0.60, 0.10, 0.50)
-        cr.set_line_width(0.8 / scale)
-        cr.set_dash([dash, dash * 0.6], 0)
+        # ── Safety margin (bright neon-orange dashed) ──
+        dash = 6.0 / scale
+        cr.set_source_rgba(1.0, 0.45, 0.0, 1.0)   # full-opacity neon orange
+        cr.set_line_width(1.6 / scale)
+        cr.set_dash([dash, dash * 0.55], 0)
         cr.rectangle(margin, margin, bed_w - 2 * margin, bed_h - 2 * margin)
         cr.stroke()
         cr.set_dash([], 0)

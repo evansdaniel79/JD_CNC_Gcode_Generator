@@ -16,10 +16,7 @@ class GCodeLogic:
     Speed convention
     ----------------
     The UI stores all speeds in **mm/s**.  G-code F-words use **mm/min**.
-    `_to_mm_min()` does the conversion and `_apply_override()` applies the
-    speed-override percentage that the user sets in the Speeds tab.
-    Previously, the speed override setting was stored but never actually
-    applied — that is now fixed.
+    `_to_mm_min()` does the conversion.
     """
 
     # ------------------------------------------------------------------ #
@@ -51,13 +48,6 @@ class GCodeLogic:
 
         self._tool_offset_x = float(config.get("tool_offset_x", 0))
         self._tool_offset_y = float(config.get("tool_offset_y", 0))
-
-        # Speed override (%) — clamp to [1, 200]
-        try:
-            override_pct = float(config.get("speed_override", 100) or 100)
-        except ValueError:
-            override_pct = 100.0
-        self._override = max(1.0, min(200.0, override_pct))
 
         # Remove duplicate paths before doing anything else
         cut_paths   = self._dedup_paths(cut_paths   or [])
@@ -121,6 +111,9 @@ class GCodeLogic:
                     if not (self._margin <= x <= self._bed_w - self._margin and
                             self._margin <= y <= self._bed_h - self._margin):
                         return False, (
+                            f"Object extends outside the "
+                            f"{self._bed_w:.0f}×{self._bed_h:.0f} mm bed "
+                            f"(with {self._margin:.0f} mm safety margin)."
                         )
         return True, ""
 
@@ -153,11 +146,11 @@ class GCodeLogic:
         z_travel = cfg.get("z_stepper_travel_height",  "5.0")
         z_work   = z_score if is_scoring else z_cut
 
-        # Speeds: UI stores mm/s, convert to mm/min, then apply override
-        cut_speed    = self._to_mm_min_override(cfg["cutting_speed"]  if not is_scoring else cfg["scoring_speed"])
-        travel_speed = self._to_mm_min_override(cfg["travel_speed"])
-        z_plunge_spd = self._to_mm_min_override(cfg.get("z_plunge_speed", 20))
-        z_raise_spd  = self._to_mm_min_override(cfg.get("z_raise_speed",  20))
+        # Speeds: UI stores mm/s, convert to mm/min for G-code
+        cut_speed    = self._to_mm_min(cfg["cutting_speed"]  if not is_scoring else cfg["scoring_speed"])
+        travel_speed = self._to_mm_min(cfg["travel_speed"])
+        z_plunge_spd = self._to_mm_min(cfg.get("z_plunge_speed", 20))
+        z_raise_spd  = self._to_mm_min(cfg.get("z_raise_speed",  20))
 
         # Format speeds without trailing decimals when they're whole numbers
         def fmt_f(v):
@@ -229,8 +222,8 @@ class GCodeLogic:
         except ValueError:
             servo_delay = 200.0
 
-        cut_speed    = self._to_mm_min_override(cfg["scoring_speed"] if is_scoring else cfg["cutting_speed"])
-        travel_speed = self._to_mm_min_override(cfg["travel_speed"])
+        cut_speed    = self._to_mm_min(cfg["scoring_speed"] if is_scoring else cfg["cutting_speed"])
+        travel_speed = self._to_mm_min(cfg["travel_speed"])
 
         def fmt_f(v):
             return int(v) if v == int(v) else round(v, 1)
@@ -330,10 +323,6 @@ class GCodeLogic:
             return float(val) * 60.0
         except (ValueError, TypeError):
             return 0.0
-
-    def _to_mm_min_override(self, val):
-        """Convert mm/s → mm/min and apply the speed-override percentage."""
-        return self._to_mm_min(val) * self._override / 100.0
 
     @staticmethod
     def _dedup_paths(paths):

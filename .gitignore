@@ -1,2 +1,16 @@
-# Ignore Python cache and IDE folders
-__pycache__/*
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Generated config & output (user-specific, not source)
+JD_CNC_Gcode_Generator_config.json
+*.gcode
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# OS cruft
+.DS_Store
