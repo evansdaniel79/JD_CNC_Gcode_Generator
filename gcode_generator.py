@@ -21,7 +21,7 @@ import os
 import logging
 import traceback
 
-SCRIPT_VERSION = "2.0.0"
+SCRIPT_VERSION = "2.1.5"
 # Directory this script lives in — used for loading assets like logo.svg
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -97,7 +97,7 @@ class CNCDialog(Gtk.Dialog):
 
     def __init__(self, parent=None, effect=None):
         super().__init__(
-            title=f"JD CNC G-code Generator  v{SCRIPT_VERSION}",
+            title=f"JD CNC G-code Generator  {SCRIPT_VERSION}",
             transient_for=parent,
             modal=True,
             destroy_with_parent=True,
@@ -729,7 +729,7 @@ class CNCDialog(Gtk.Dialog):
                 )
                 if not in_bounds:
                     GLib.idle_add(self._stop_progress)
-                    logging.error(f"Object outside cutter area: {msg}")
+                    logging.error(f"Object outside the cutter area")
                     self._prev_out_of_bounds = True
                     GLib.idle_add(self._update_generate_export_button)
                     return
