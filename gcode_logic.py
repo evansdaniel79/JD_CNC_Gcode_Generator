@@ -121,9 +121,9 @@ class GCodeLogic:
                     if not (self._margin <= x <= self._bed_w - self._margin and
                             self._margin <= y <= self._bed_h - self._margin):
                         return False, (
-                            f"Point ({x:.1f}, {y:.1f}) mm is outside the bed "
-                            f"({self._bed_w}×{self._bed_h} mm) with "
-                            f"{self._margin} mm safety margin."
+                            f"Object extends outside the "
+                            f"{self._bed_w:.0f}×{self._bed_h:.0f} mm bed "
+                            f"(with {self._margin:.0f} mm safety margin)."
                         )
         return True, ""
 

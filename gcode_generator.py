@@ -203,7 +203,7 @@ class CNCDialog(Gtk.Dialog):
         self._create_gcode_templates_tab()
 
         # Bottom button bar
-        root.pack_start(self._create_button_panel(), False, False, 6)
+        root.pack_start(self._create_button_panel(), False, False, 0)
 
         self.load_config_to_ui()
         self.connect("destroy", self._on_dialog_close)
@@ -553,34 +553,44 @@ class CNCDialog(Gtk.Dialog):
     # ── Button panel ─────────────────────────────────────────────────────────
 
     def _create_button_panel(self):
+        # Horizontal bar: status text on the left, action buttons on the right.
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        box.set_border_width(6)
-        box.set_halign(Gtk.Align.END)
+        box.set_margin_top(4)
+        box.set_margin_bottom(4)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+
+        # Left-aligned status label so the bar isn't empty dead space
+        self._status_label = Gtk.Label(label=f"JD CNC G-code Generator  v{SCRIPT_VERSION}")
+        self._status_label.set_halign(Gtk.Align.START)
+        self._status_label.get_style_context().add_class("info-label")
+        box.pack_start(self._status_label, True, True, 0)
 
         # Auto Center
         self.auto_center_button = Gtk.Button(label="Auto Center")
-        self.auto_center_button.set_size_request(140, 36)
+        self.auto_center_button.set_size_request(140, 34)
         self.auto_center_button.connect("clicked", self._on_auto_center_clicked)
-        box.pack_end(self.auto_center_button, False, False, 0)
 
         # Combined Generate / Export button with progress overlay
         self.generate_export_button = Gtk.Button(label="Generate G-code")
-        self.generate_export_button.set_size_request(180, 36)
+        self.generate_export_button.set_size_request(180, 34)
         self.generate_export_button.connect("clicked", self._on_generate_export_clicked)
 
         btn_overlay = Gtk.Overlay()
-        btn_overlay.set_size_request(180, 36)
+        btn_overlay.set_size_request(180, 34)
         btn_overlay.add(self.generate_export_button)
 
         self.progress_haze = Gtk.DrawingArea()
-        self.progress_haze.set_size_request(180, 36)
+        self.progress_haze.set_size_request(180, 34)
         self.progress_haze.set_no_show_all(True)
         self.progress_haze.set_opacity(0.5)
         self.progress_haze.connect("draw", self._on_progress_haze_draw)
         btn_overlay.add_overlay(self.progress_haze)
         self.progress_haze.hide()
 
-        box.pack_end(btn_overlay, False, False, 0)
+        # Pack right-side buttons (order: Auto Center, then Generate/Export)
+        box.pack_start(self.auto_center_button, False, False, 0)
+        box.pack_start(btn_overlay,             False, False, 0)
         return box
 
     # ── Hamburger menu ────────────────────────────────────────────────────────
@@ -940,6 +950,13 @@ class CNCDialog(Gtk.Dialog):
         n_score = sum(len(p) for p in score)
         self._info_cut_paths.set_text(str(n_cut))
         self._info_score_paths.set_text(str(n_score))
+
+        # Status bar — show a quick summary if G-code is ready
+        if stats and hasattr(self, "_status_label"):
+            self._status_label.set_text(
+                f"Ready  ·  {n_cut + n_score} path(s)  ·  "
+                f"{stats.get('distance', 0.0):.0f} mm cut"
+            )
 
     def _update_generate_export_button(self):
         """Flip button label and style between Generate and Export states."""
