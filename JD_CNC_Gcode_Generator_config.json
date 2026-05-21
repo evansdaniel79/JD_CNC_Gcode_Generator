@@ -1,6 +1,6 @@
 {
     "last": {
-        "bed_width": "755",
+        "bed_width": "742",
         "bed_height": "494",
         "origin_point": "front_left",
         "servo_delay": "",
@@ -10,23 +10,23 @@
         "tool_offset_x": "0",
         "tool_offset_y": "0",
         "tool_diameter": "0.6",
-        "travel_speed": "200",
-        "z_plunge_speed": "20",
-        "z_raise_speed": "30",
-        "cutting_speed": "30",
-        "scoring_speed": "35",
-        "max_velocity_xy": "300",
-        "max_velocity_z": "50",
-        "max_acceleration": "2000",
+        "travel_speed": "250",
+        "z_plunge_speed": "12",
+        "z_raise_speed": "12",
+        "cutting_speed": "10",
+        "scoring_speed": "12",
+        "max_velocity_xy": "5000",
+        "max_velocity_z": "5000",
+        "max_acceleration": "100",
         "jerk": "10",
         "speed_override": "100",
         "safety_margin": "5",
-        "start_gcode": "; Start G-code\nM280 P0 S0 ; arm ESC\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes\nM420 S1 \nM280 P0 S180 ; Start cutter\n",
-        "end_gcode": "; End G-code\nG28\nM280 P0 S0 ; Stop cutter",
+        "start_gcode": "; Start G-code\nM280 P1 S0 ; arm ESC\nG21 ; Set units to mm\nG90 ; Use absolute coordinates\nG28 ; Home all axes (Finds X, Y, and Z zero)\nG92 X3.977 Y-3.462\nG29 L0 ; Load the UBL mesh you saved in Slot 0\nG29 A ; Turn UBL Active\nG4 P1000\nM280 P1 S100 ; Start cutter\nG4 P1000\nG1 Z18\n\n",
+        "end_gcode": "; End G-code\nG1 Z10\nG28 X Y\n\nM280 P1 S0 ; Stop cutter",
         "z_mode": "stepper",
-        "z_stepper_cut_height": "3.2",
-        "z_stepper_travel_height": "15",
-        "z_stepper_score_height": "6.8",
+        "z_stepper_cut_height": "1",
+        "z_stepper_travel_height": "18",
+        "z_stepper_score_height": "4",
         "spindle_speed": "10000",
         "units": 0,
         "plunge_speed": "500",
@@ -68,7 +68,7 @@
         "cut_line_color": "#FF0000"
     },
     "last_export": {
-        "dir": "/run/media/daniel/EFE8-F197",
-        "filename": "tiny_trainer_fuselauge.gcode"
+        "dir": "/run/media/daniel/JD CNC",
+        "filename": "onewheel_xr_gasket_new.gcode"
     }
 }
